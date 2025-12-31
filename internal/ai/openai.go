@@ -17,7 +17,6 @@ type Client struct {
 // CommitMessage is the structured output from the AI tool call
 type CommitMessage struct {
 	Type    string   `json:"type"`    // feat, fix, docs, etc.
-	Scope   string   `json:"scope"`   // optional scope
 	Subject string   `json:"subject"` // commit subject line
 	Body    string   `json:"body"`    // optional commit body
 	Files   []string `json:"files"`   // files for this commit (used in split)
@@ -26,11 +25,7 @@ type CommitMessage struct {
 func (c *CommitMessage) String() string {
 	msg := ""
 	if c.Type != "" {
-		msg = c.Type
-		if c.Scope != "" {
-			msg += "(" + c.Scope + ")"
-		}
-		msg += ": "
+		msg = c.Type + ": "
 	}
 	msg += c.Subject
 	if c.Body != "" {
@@ -56,10 +51,6 @@ var commitTool = openai.Tool{
 				"type": map[string]any{
 					"type":        "string",
 					"description": "Commit type (feat, fix, docs, style, refactor, test, chore, etc)",
-				},
-				"scope": map[string]any{
-					"type":        "string",
-					"description": "Optional scope of the change",
 				},
 				"subject": map[string]any{
 					"type":        "string",
@@ -93,10 +84,6 @@ var splitCommitsTool = openai.Tool{
 							"type": map[string]any{
 								"type":        "string",
 								"description": "Commit type (feat, fix, docs, style, refactor, test, chore)",
-							},
-							"scope": map[string]any{
-								"type":        "string",
-								"description": "Optional scope of the change",
 							},
 							"subject": map[string]any{
 								"type":        "string",

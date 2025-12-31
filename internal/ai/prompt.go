@@ -5,16 +5,28 @@ import (
 	"strings"
 )
 
-const systemPrompt = `You are an expert software engineer who writes clear, professional git commit messages. Your goal is to help developers maintain a clean, readable git history.
+// Truncation limits (exported for testing)
+const (
+	MaxDiffSize = 12000 // max total diff size in characters
+	ShowLines   = 100   // lines to show in each segment
+	SkipLines   = 50    // lines to skip between segments
+)
+
+const systemPrompt = `You are an expert software engineer who writes clear, professional git commit messages. Your goal is to help developers maintain a clean, atomic git history.
 
 ## Your Task
-Analyze the provided diff and generate a commit message that clearly communicates what changed and why.
+Analyze the provided diff and generate commit message(s). Prefer splitting into multiple atomic commits when changes serve different purposes.
 
-## Step-by-Step Process
-1. First, identify all distinct changes in the diff (bug fixes, features, refactors, etc.)
-2. Determine if changes are related (single commit) or unrelated (split commits)
-3. For each commit, summarize the primary change in an imperative subject line
-4. Add a body only if the "why" isn't obvious from the subject
+## When to Split Commits
+PREFER split_commits when you see:
+- Different types of changes (feat + fix, refactor + docs, etc.)
+- Changes to unrelated parts of the codebase
+- A bug fix alongside a new feature
+- Formatting/style changes mixed with logic changes
+- Test additions for existing code + new feature code
+- Multiple independent improvements
+
+Use submit_commit ONLY when ALL changes serve a single, cohesive purpose.
 
 ## Commit Message Format
 - Subject: imperative mood, max 72 characters, no period at end
@@ -35,8 +47,8 @@ during maintenance windows. This adds retry logic with
 exponential backoff to improve reliability.
 
 ## Tools
-- Use submit_commit when all changes serve a single purpose
-- Use split_commits when changes are unrelated (e.g., a bug fix mixed with a new feature)`
+- split_commits: Use this for most cases with multiple distinct changes (PREFERRED)
+- submit_commit: Use only when all changes are tightly related to one purpose`
 
 func BuildPrompt(files []string, diff string, conventional bool, types []string, customInstructions string, previousMsg string, feedback string) string {
 	var sb strings.Builder
@@ -59,11 +71,7 @@ func BuildPrompt(files []string, diff string, conventional bool, types []string,
 	}
 
 	sb.WriteString("\nDiff:\n```\n")
-	// Truncate diff if too long
-	if len(diff) > 8000 {
-		diff = diff[:8000] + "\n... (truncated)"
-	}
-	sb.WriteString(diff)
+	sb.WriteString(truncateDiff(diff))
 	sb.WriteString("\n```\n")
 
 	if conventional {
@@ -81,4 +89,123 @@ func BuildPrompt(files []string, diff string, conventional bool, types []string,
 
 func SystemPrompt() string {
 	return systemPrompt
+}
+
+// truncateDiff intelligently truncates a diff while preserving context
+func truncateDiff(diff string) string {
+	var result strings.Builder
+	files := splitByFiles(diff)
+
+	for _, file := range files {
+		// Always apply hunk truncation for large hunks
+		truncatedFile := truncateFile(file)
+		result.WriteString(truncatedFile)
+
+		// Stop if we've exceeded the overall limit
+		if result.Len() > MaxDiffSize {
+			result.WriteString("\n... (remaining files truncated) ...")
+			break
+		}
+	}
+
+	return result.String()
+}
+
+// splitByFiles splits a diff into per-file sections
+func splitByFiles(diff string) []string {
+	var files []string
+	lines := strings.Split(diff, "\n")
+	var current strings.Builder
+
+	for _, line := range lines {
+		if strings.HasPrefix(line, "diff --git") && current.Len() > 0 {
+			files = append(files, current.String())
+			current.Reset()
+		}
+		current.WriteString(line)
+		current.WriteString("\n")
+	}
+
+	if current.Len() > 0 {
+		files = append(files, current.String())
+	}
+
+	return files
+}
+
+// truncateFile truncates a single file's diff, preserving hunks structure
+func truncateFile(fileDiff string) string {
+	lines := strings.Split(fileDiff, "\n")
+	var result strings.Builder
+	var hunkLines []string
+	inHunk := false
+
+	for _, line := range lines {
+		if strings.HasPrefix(line, "@@") {
+			// Flush previous hunk
+			if len(hunkLines) > 0 {
+				result.WriteString(truncateHunk(hunkLines))
+			}
+			hunkLines = []string{line}
+			inHunk = true
+		} else if inHunk {
+			hunkLines = append(hunkLines, line)
+		} else {
+			// Header lines (diff --git, ---, +++, etc.)
+			result.WriteString(line)
+			result.WriteString("\n")
+		}
+	}
+
+	// Flush last hunk
+	if len(hunkLines) > 0 {
+		result.WriteString(truncateHunk(hunkLines))
+	}
+
+	return result.String()
+}
+
+// truncateHunk truncates a hunk using repeating show/skip pattern
+func truncateHunk(lines []string) string {
+	// Small hunks don't need truncation
+	if len(lines) <= ShowLines {
+		return strings.Join(lines, "\n") + "\n"
+	}
+
+	var result strings.Builder
+	i := 0
+	lineNum := 0 // track actual line number for context
+
+	for i < len(lines) {
+		// Show segment
+		end := i + ShowLines
+		if end > len(lines) {
+			end = len(lines)
+		}
+		for j := i; j < end; j++ {
+			result.WriteString(lines[j])
+			result.WriteString("\n")
+			lineNum++
+		}
+		i = end
+
+		// Skip segment (if there's more content)
+		if i < len(lines) {
+			skipEnd := i + SkipLines
+			if skipEnd > len(lines) {
+				skipEnd = len(lines)
+			}
+			skipped := skipEnd - i
+			if skipped > 0 {
+				// Provide context: line range and sample of what's skipped
+				startLine := lineNum + 1
+				endLine := lineNum + skipped
+				result.WriteString(fmt.Sprintf("... [lines %d-%d: %d lines skipped - similar changes continue] ...\n", startLine, endLine, skipped))
+				lineNum += skipped
+			}
+			i = skipEnd
+		}
+	}
+
+	return result.String()
 }
