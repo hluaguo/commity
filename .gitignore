@@ -1,13 +1,16 @@
 # Binary
-commity
 dist/
+commity
 
 # IDE
 .idea/
 .vscode/
-
+.clj-kondo/
+.lsp/
 # OS
 .DS_Store
 
 # Test
 coverage.out
+
+!commity/
