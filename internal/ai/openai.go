@@ -55,7 +55,7 @@ var commitTool = openai.Tool{
 			"properties": map[string]any{
 				"type": map[string]any{
 					"type":        "string",
-					"description": "Commit type (feat, fix, docs, style, refactor, test, chore)",
+					"description": "Commit type (feat, fix, docs, style, refactor, test, chore, etc)",
 				},
 				"scope": map[string]any{
 					"type":        "string",
