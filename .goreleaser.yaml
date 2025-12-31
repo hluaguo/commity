@@ -20,11 +20,13 @@ builds:
       - -s -w -X main.version={{.Version}}
 
 archives:
-  - format: tar.gz
+  - formats:
+      - tar.gz
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     format_overrides:
       - goos: windows
-        format: zip
+        formats:
+          - zip
 
 checksum:
   name_template: 'checksums.txt'
@@ -42,6 +44,7 @@ brews:
     repository:
       owner: hluaguo
       name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     directory: Formula
     homepage: "https://github.com/hluaguo/commity"
     description: "AI-powered git commit message generator with TUI"
