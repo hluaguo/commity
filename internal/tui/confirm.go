@@ -42,7 +42,7 @@ func (m *ConfirmModel) Update(msg tea.Msg) (*ConfirmModel, tea.Cmd) {
 	if m.cursor == 2 && m.input.Focused() {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
 			switch keyMsg.String() {
-			case "up", "k":
+			case "up": // Only arrow key, not 'k' - allow typing 'k'
 				m.cursor--
 				m.input.Blur()
 				return m, nil
@@ -51,9 +51,12 @@ func (m *ConfirmModel) Update(msg tea.Msg) (*ConfirmModel, tea.Cmd) {
 				m.action = "regenerate"
 				m.feedback = m.input.Value()
 				return m, nil
+			case "esc":
+				m.input.Blur()
+				return m, nil
 			}
 		}
-		// Pass all other messages to input
+		// Pass all other messages to input (including 'j', 'k', etc.)
 		var cmd tea.Cmd
 		m.input, cmd = m.input.Update(msg)
 		return m, cmd
