@@ -250,6 +250,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.initSettingsForm()
 				return m, m.form.Init()
 			}
+		case "b", "B":
+			// Go back from error state
+			if m.state == stateError {
+				m.err = nil
+				m.state = stateFileSelect
+				m.initFileSelectForm()
+				return m, m.form.Init()
+			}
 		}
 
 	case initCompleteMsg:
@@ -573,7 +581,7 @@ func (m *Model) View() string {
 		if m.isSplit {
 			s.WriteString(m.styles.Success.Render(fmt.Sprintf("Created %d commits successfully!", len(m.commits))))
 		} else {
-			s.WriteString(m.styles.Success.Render("Committed successfully!"))
+			s.WriteString(m.styles.Success.Render("Committed successfully! Do not forget to push"))
 		}
 		s.WriteString("\n\n")
 		for i, c := range m.commits {
@@ -585,6 +593,8 @@ func (m *Model) View() string {
 
 	case stateError:
 		s.WriteString(wrapText(m.styles.Error.Render(fmt.Sprintf("Error: %v", m.err)), m.termWidth-2))
+		s.WriteString("\n\n")
+		s.WriteString(m.renderKeyHint("[b]", "back") + "  " + m.renderKeyHint("[q]", "quit"))
 	}
 
 	s.WriteString("\n")
