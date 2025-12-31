@@ -13,12 +13,6 @@ AI-powered git commit message generator with a beautiful terminal UI.
 
 ## Installation
 
-### Homebrew
-
-```bash
-brew install hluaguo/tap/commity
-```
-
 ### Go Install
 
 ```bash
