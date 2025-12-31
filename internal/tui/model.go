@@ -607,7 +607,12 @@ func (m *Model) View() string {
 		s.WriteString("\n\n")
 		for i, c := range m.commits {
 			if m.completed[i] {
-				s.WriteString(wrapText(m.styles.Dim.Render(fmt.Sprintf("  %s", c.String())), m.termWidth-2))
+				// Show only the subject line (first line) for cleaner output
+				msg := c.String()
+				if idx := strings.Index(msg, "\n"); idx != -1 {
+					msg = msg[:idx]
+				}
+				s.WriteString(m.styles.Dim.Render(fmt.Sprintf("  %s", msg)))
 				s.WriteString("\n")
 			}
 		}
