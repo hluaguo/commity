@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -111,17 +112,10 @@ func New(cfg *config.Config, repo *git.Repository, aiClient *ai.Client, isFirstR
 }
 
 func (m *Model) initFileSelectForm() {
-	options := make([]huh.Option[string], len(m.files))
+	// Build tree structure and get formatted options
+	options, selectedPaths := m.buildFileTreeOptions()
 
-	// Pre-populate selected with already staged files
-	m.selected = nil
-	for i, f := range m.files {
-		label := fmt.Sprintf("[%s] %s", f.Status, f.Path)
-		options[i] = huh.NewOption(label, f.Path).Selected(f.Staged)
-		if f.Staged {
-			m.selected = append(m.selected, f.Path)
-		}
-	}
+	m.selected = selectedPaths
 
 	m.form = huh.NewForm(
 		huh.NewGroup(
@@ -131,6 +125,29 @@ func (m *Model) initFileSelectForm() {
 				Value(&m.selected),
 		),
 	).WithTheme(m.theme.GetHuhTheme()).WithShowHelp(false)
+}
+
+// buildFileTreeOptions creates options for the file selector
+func (m *Model) buildFileTreeOptions() ([]huh.Option[string], []string) {
+	var options []huh.Option[string]
+	var selectedPaths []string
+
+	// Sort files by path for consistent display
+	files := make([]git.FileStatus, len(m.files))
+	copy(files, m.files)
+	sort.Slice(files, func(i, j int) bool {
+		return files[i].Path < files[j].Path
+	})
+
+	for _, f := range files {
+		label := fmt.Sprintf("[%s] %s", f.Status, f.Path)
+		options = append(options, huh.NewOption(label, f.Path).Selected(f.Staged))
+		if f.Staged {
+			selectedPaths = append(selectedPaths, f.Path)
+		}
+	}
+
+	return options, selectedPaths
 }
 
 func (m *Model) getThemeOptions() []huh.Option[string] {
