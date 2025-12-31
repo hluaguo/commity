@@ -33,33 +33,9 @@ cd commity
 make install
 ```
 
-## Configuration
-
-On first run, commity will guide you through setup. Configuration is stored at:
-
-- macOS: `~/Library/Application Support/commity/config.toml`
-- Linux: `~/.config/commity/config.toml`
-
-### Example Config
-
-```toml
-[ai]
-base_url = "https://openrouter.ai/api/v1"
-api_key = "your-api-key"
-model = "openai/gpt-4o-mini"
-custom_instructions = ""
-
-[commit]
-conventional = true
-types = ["feat", "fix", "docs", "style", "refactor", "test", "chore"]
-
-[ui]
-theme = "tokyonight"
-```
-
 ### Supported Providers
 
-Any OpenAI-compatible API works:
+Any OpenAI-compatible API works: (will support more)
 
 - OpenAI
 - OpenRouter
@@ -83,16 +59,16 @@ commity
 
 ### Key Bindings
 
-| Screen | Key | Action |
-|--------|-----|--------|
-| File Select | `space` | Toggle file selection |
-| File Select | `enter` | Submit selection |
-| File Select | `s` | Open settings |
-| File Select | `q` | Quit |
-| Confirm | `enter` | Select action |
-| Confirm | `e` | Edit message |
-| Edit | `ctrl+s` | Save changes |
-| Edit | `esc` | Cancel edit |
+| Screen      | Key      | Action                |
+| ----------- | -------- | --------------------- |
+| File Select | `space`  | Toggle file selection |
+| File Select | `enter`  | Submit selection      |
+| File Select | `s`      | Open settings         |
+| File Select | `q`      | Quit                  |
+| Confirm     | `enter`  | Select action         |
+| Confirm     | `e`      | Edit message          |
+| Edit        | `ctrl+s` | Save changes          |
+| Edit        | `esc`    | Cancel edit           |
 
 ## Development
 
