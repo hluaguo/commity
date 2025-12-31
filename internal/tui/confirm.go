@@ -73,6 +73,14 @@ func (m *ConfirmModel) Update(msg tea.Msg) (*ConfirmModel, tea.Cmd) {
 			}
 			return m, nil
 
+		case "e", "E":
+			// Edit message - only when not typing in regenerate input
+			if m.cursor != 2 || !m.input.Focused() {
+				m.submitted = true
+				m.action = "edit"
+				return m, nil
+			}
+
 		default:
 			// If on regenerate option, any printable key focuses and types
 			if m.cursor == 2 {
@@ -132,7 +140,13 @@ func (m *ConfirmModel) View() string {
 	}
 
 	s.WriteString(fmt.Sprintf("%s%s %s", cursor, style.Render("Regenerate:"), inputView))
-	s.WriteString("\n")
+	s.WriteString("\n\n")
+
+	// Key hint
+	keyStyle := lipgloss.NewStyle().Foreground(m.theme.Primary).Bold(true)
+	s.WriteString(dimStyle.Render("Press "))
+	s.WriteString(keyStyle.Render("e"))
+	s.WriteString(dimStyle.Render(" to edit message"))
 
 	return s.String()
 }

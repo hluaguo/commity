@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
@@ -21,6 +22,7 @@ const (
 	stateFileSelect              // file selection
 	stateGenerating
 	stateConfirm
+	stateEdit // editing commit message
 	stateCommitting
 	stateDone
 	stateSettings // settings page
@@ -47,6 +49,7 @@ type Model struct {
 
 	form        *huh.Form
 	confirmForm *ConfirmModel
+	editArea    textarea.Model
 	spinner     spinner.Model
 	err         error
 	termWidth   int
@@ -403,9 +406,45 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "regenerate":
 				m.state = stateGenerating
 				return m, m.generateCommitMessage()
+			case "edit":
+				m.state = stateEdit
+				// Initialize textarea with current message
+				ta := textarea.New()
+				ta.SetValue(m.commits[m.currentIndex].String())
+				ta.Focus()
+				ta.SetWidth(m.termWidth - 4)
+				ta.SetHeight(10)
+				m.editArea = ta
+				return m, textarea.Blink
 			}
 		}
 
+		return m, cmd
+
+	case stateEdit:
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			switch msg.String() {
+			case "esc":
+				// Cancel edit, go back to confirm
+				m.state = stateConfirm
+				m.initConfirmForm()
+				return m, m.confirmForm.Init()
+			case "ctrl+s":
+				// Save edit
+				newMsg := m.editArea.Value()
+				// Update the commit message (just subject for simplicity)
+				m.commits[m.currentIndex] = ai.CommitMessage{
+					Subject: newMsg,
+					Files:   m.commits[m.currentIndex].Files,
+				}
+				m.state = stateConfirm
+				m.initConfirmForm()
+				return m, m.confirmForm.Init()
+			}
+		}
+		var cmd tea.Cmd
+		m.editArea, cmd = m.editArea.Update(msg)
 		return m, cmd
 
 	case stateGenerating, stateCommitting:
@@ -504,6 +543,18 @@ func (m *Model) View() string {
 		s.WriteString(m.styles.Message.Width(msgWidth).Render(commit.String()))
 		s.WriteString("\n\n")
 		s.WriteString(m.confirmForm.View())
+
+	case stateEdit:
+		s.WriteString(m.styles.Dim.Render("Edit commit message:"))
+		s.WriteString("\n\n")
+		s.WriteString(m.editArea.View())
+		s.WriteString("\n\n")
+		keyStyle := lipgloss.NewStyle().Foreground(m.theme.Primary).Bold(true)
+		s.WriteString(m.styles.Dim.Render("Press "))
+		s.WriteString(keyStyle.Render("Ctrl+S"))
+		s.WriteString(m.styles.Dim.Render(" to save, "))
+		s.WriteString(keyStyle.Render("Esc"))
+		s.WriteString(m.styles.Dim.Render(" to cancel"))
 
 	case stateCommitting:
 		s.WriteString(m.spinner.View())
