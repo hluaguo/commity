@@ -11,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
+
 	"github.com/hluaguo/commity/internal/ai"
 	"github.com/hluaguo/commity/internal/config"
 	"github.com/hluaguo/commity/internal/git"
@@ -54,6 +55,7 @@ const (
 // Model
 // ---------------------------------------------------------------------------
 
+// Model is the main Bubble Tea model for the commity TUI.
 type Model struct {
 	state         state
 	previousState state // for returning from settings
@@ -663,6 +665,10 @@ func (m *Model) generateCommitMessage() tea.Cmd {
 	feedback := m.feedback
 
 	return func() tea.Msg {
+		if m.aiClient == nil {
+			return generateMsg{err: fmt.Errorf("AI client not initialized")}
+		}
+
 		diff, err := m.repo.DiffAll(m.selected)
 		if err != nil {
 			return generateMsg{err: err}

@@ -10,6 +10,9 @@ import (
 	"strings"
 )
 
+const minStatusLineLength = 4 // "XY " + at least 1 char path
+
+// FileStatus represents the git status of a file in the working tree.
 type FileStatus struct {
 	Path   string
 	Status string // M, A, D, ??, R, etc.
@@ -33,6 +36,7 @@ func (f FileStatus) StatusLabel() string {
 	}
 }
 
+// Repository provides git operations for a local repository.
 type Repository struct {
 	path string
 }
@@ -58,7 +62,7 @@ func (r *Repository) Status() ([]FileStatus, error) {
 	scanner := bufio.NewScanner(bytes.NewReader(out))
 	for scanner.Scan() {
 		line := scanner.Text()
-		if len(line) < 4 {
+		if len(line) < minStatusLineLength {
 			continue
 		}
 

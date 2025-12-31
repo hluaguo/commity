@@ -5,58 +5,54 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// Theme defines the color scheme for the TUI.
 type Theme struct {
-	Name       string
-	Primary    lipgloss.Color
-	Secondary  lipgloss.Color
-	Success    lipgloss.Color
-	Error      lipgloss.Color
-	Dim        lipgloss.Color
-	Border     lipgloss.Color
-	Background lipgloss.Color
-	HuhTheme   *huh.Theme
+	Name      string
+	Primary   lipgloss.Color
+	Secondary lipgloss.Color
+	Success   lipgloss.Color
+	Error     lipgloss.Color
+	Dim       lipgloss.Color
+	Border    lipgloss.Color
+	HuhTheme  *huh.Theme
 }
 
 var themes = map[string]*Theme{
 	"tokyonight": {
-		Name:       "tokyonight",
-		Primary:    lipgloss.Color("#7aa2f7"),
-		Secondary:  lipgloss.Color("#bb9af7"),
-		Success:    lipgloss.Color("#9ece6a"),
-		Error:      lipgloss.Color("#f7768e"),
-		Dim:        lipgloss.Color("#565f89"),
-		Border:     lipgloss.Color("#3b4261"),
-		Background: lipgloss.Color("#1a1b26"),
+		Name:      "tokyonight",
+		Primary:   lipgloss.Color("#7aa2f7"),
+		Secondary: lipgloss.Color("#bb9af7"),
+		Success:   lipgloss.Color("#9ece6a"),
+		Error:     lipgloss.Color("#f7768e"),
+		Dim:       lipgloss.Color("#565f89"),
+		Border:    lipgloss.Color("#3b4261"),
 	},
 	"dracula": {
-		Name:       "dracula",
-		Primary:    lipgloss.Color("#bd93f9"),
-		Secondary:  lipgloss.Color("#ff79c6"),
-		Success:    lipgloss.Color("#50fa7b"),
-		Error:      lipgloss.Color("#ff5555"),
-		Dim:        lipgloss.Color("#6272a4"),
-		Border:     lipgloss.Color("#44475a"),
-		Background: lipgloss.Color("#282a36"),
+		Name:      "dracula",
+		Primary:   lipgloss.Color("#bd93f9"),
+		Secondary: lipgloss.Color("#ff79c6"),
+		Success:   lipgloss.Color("#50fa7b"),
+		Error:     lipgloss.Color("#ff5555"),
+		Dim:       lipgloss.Color("#6272a4"),
+		Border:    lipgloss.Color("#44475a"),
 	},
 	"catppuccin": {
-		Name:       "catppuccin",
-		Primary:    lipgloss.Color("#cba6f7"),
-		Secondary:  lipgloss.Color("#f5c2e7"),
-		Success:    lipgloss.Color("#a6e3a1"),
-		Error:      lipgloss.Color("#f38ba8"),
-		Dim:        lipgloss.Color("#6c7086"),
-		Border:     lipgloss.Color("#45475a"),
-		Background: lipgloss.Color("#1e1e2e"),
+		Name:      "catppuccin",
+		Primary:   lipgloss.Color("#cba6f7"),
+		Secondary: lipgloss.Color("#f5c2e7"),
+		Success:   lipgloss.Color("#a6e3a1"),
+		Error:     lipgloss.Color("#f38ba8"),
+		Dim:       lipgloss.Color("#6c7086"),
+		Border:    lipgloss.Color("#45475a"),
 	},
 	"nord": {
-		Name:       "nord",
-		Primary:    lipgloss.Color("#88c0d0"),
-		Secondary:  lipgloss.Color("#81a1c1"),
-		Success:    lipgloss.Color("#a3be8c"),
-		Error:      lipgloss.Color("#bf616a"),
-		Dim:        lipgloss.Color("#4c566a"),
-		Border:     lipgloss.Color("#3b4252"),
-		Background: lipgloss.Color("#2e3440"),
+		Name:      "nord",
+		Primary:   lipgloss.Color("#88c0d0"),
+		Secondary: lipgloss.Color("#81a1c1"),
+		Success:   lipgloss.Color("#a3be8c"),
+		Error:     lipgloss.Color("#bf616a"),
+		Dim:       lipgloss.Color("#4c566a"),
+		Border:    lipgloss.Color("#3b4252"),
 	},
 }
 
