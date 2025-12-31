@@ -67,6 +67,11 @@ func TestLoadNonExistent(t *testing.T) {
 }
 
 func TestLoadValidConfig(t *testing.T) {
+	// Clear env vars that could override config
+	t.Setenv("OPENAI_API_KEY", "")
+	t.Setenv("OPENAI_BASE_URL", "")
+	t.Setenv("OPENAI_MODEL", "")
+
 	// Create a temporary config file
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.toml")
@@ -144,6 +149,11 @@ func TestLoadInvalidTOML(t *testing.T) {
 }
 
 func TestLoadPartialConfig(t *testing.T) {
+	// Clear env vars that could override config
+	t.Setenv("OPENAI_API_KEY", "")
+	t.Setenv("OPENAI_BASE_URL", "")
+	t.Setenv("OPENAI_MODEL", "")
+
 	// Partial config should merge with defaults
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.toml")
