@@ -1,5 +1,6 @@
 # Binary
 commity
+dist/
 
 # IDE
 .idea/
@@ -7,3 +8,6 @@ commity
 
 # OS
 .DS_Store
+
+# Test
+coverage.out
