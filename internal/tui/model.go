@@ -421,7 +421,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *Model) renderKeyHint(key, desc string) string {
 	keyStyle := lipgloss.NewStyle().
 		Foreground(m.theme.Primary).
-		Background(m.theme.Secondary).
 		Bold(true).
 		Padding(0, 1)
 	descStyle := lipgloss.NewStyle().
@@ -454,6 +453,11 @@ func (m *Model) View() string {
 		s.WriteString(" Generating commit message...")
 
 	case stateConfirm:
+		// Show branch
+		branch := m.repo.Branch()
+		branchStyle := lipgloss.NewStyle().Foreground(m.theme.Primary).Bold(true)
+		s.WriteString(fmt.Sprintf("Branch: %s\n\n", branchStyle.Render(branch)))
+
 		if m.isSplit {
 			s.WriteString(fmt.Sprintf("Commit %d of %d:\n\n", m.currentIndex+1, len(m.commits)))
 		} else {

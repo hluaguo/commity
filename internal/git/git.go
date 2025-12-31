@@ -164,3 +164,12 @@ func (r *Repository) Commit(message string) error {
 	}
 	return nil
 }
+
+func (r *Repository) Branch() string {
+	cmd := exec.Command("git", "branch", "--show-current")
+	out, err := cmd.Output()
+	if err != nil {
+		return "unknown"
+	}
+	return strings.TrimSpace(string(out))
+}
