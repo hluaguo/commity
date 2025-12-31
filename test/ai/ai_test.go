@@ -171,13 +171,13 @@ func TestBuildPromptNonConventional(t *testing.T) {
 
 func TestBuildPromptDiffTruncation(t *testing.T) {
 	files := []string{"large.go"}
-	// Create a large diff with proper structure (500 lines to trigger show/skip pattern)
+	// Create a large diff with proper structure (700 lines to exceed MaxDiffLines threshold)
 	var largeDiff strings.Builder
 	largeDiff.WriteString("diff --git a/large.go b/large.go\n")
 	largeDiff.WriteString("--- a/large.go\n")
 	largeDiff.WriteString("+++ b/large.go\n")
-	largeDiff.WriteString("@@ -1,500 +1,500 @@\n")
-	for i := 0; i < 500; i++ {
+	largeDiff.WriteString("@@ -1,700 +1,700 @@\n")
+	for i := 0; i < 700; i++ {
 		largeDiff.WriteString(fmt.Sprintf("+line %d content here\n", i))
 	}
 
@@ -208,6 +208,30 @@ func TestBuildPromptDiffTruncation(t *testing.T) {
 	// Should contain start of second segment
 	if !strings.Contains(prompt, fmt.Sprintf("line %d content", firstLineSecondSegment)) {
 		t.Errorf("truncated diff should contain start of second segment (line %d)", firstLineSecondSegment)
+	}
+}
+
+func TestBuildPromptNoTruncationUnderThreshold(t *testing.T) {
+	files := []string{"small.go"}
+	// Create a diff under MaxDiffLines (600) - should not be truncated
+	var diff strings.Builder
+	diff.WriteString("diff --git a/small.go b/small.go\n")
+	diff.WriteString("--- a/small.go\n")
+	diff.WriteString("+++ b/small.go\n")
+	diff.WriteString("@@ -1,500 +1,500 @@\n")
+	for i := 0; i < 500; i++ {
+		diff.WriteString(fmt.Sprintf("+line %d content here\n", i))
+	}
+
+	prompt := ai.BuildPrompt(files, diff.String(), true, []string{"feat"}, "", "", "")
+
+	// Should NOT contain truncation markers
+	if strings.Contains(prompt, "lines skipped") {
+		t.Error("diff under threshold should not be truncated")
+	}
+	// Should contain all lines
+	if !strings.Contains(prompt, "line 499 content") {
+		t.Error("diff under threshold should contain all lines")
 	}
 }
 

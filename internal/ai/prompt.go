@@ -7,9 +7,10 @@ import (
 
 // Truncation limits (exported for testing)
 const (
-	MaxDiffSize = 12000 // max total diff size in characters
-	ShowLines   = 100   // lines to show in each segment
-	SkipLines   = 50    // lines to skip between segments
+	MaxDiffLines = 600   // only truncate if diff exceeds this many lines
+	MaxDiffSize  = 12000 // max total diff size in characters
+	ShowLines    = 100   // lines to show in each segment
+	SkipLines    = 50    // lines to skip between segments
 )
 
 const systemPrompt = `You are an expert software engineer who writes clear, professional git commit messages. Your goal is to help developers maintain a clean, atomic git history.
@@ -91,13 +92,18 @@ func SystemPrompt() string {
 	return systemPrompt
 }
 
-// truncateDiff intelligently truncates a diff while preserving context
+// truncateDiff intelligently truncates a diff while preserving context.
+// Only applies truncation if the diff exceeds MaxDiffLines.
 func truncateDiff(diff string) string {
+	lineCount := strings.Count(diff, "\n")
+	if lineCount <= MaxDiffLines {
+		return diff
+	}
+
 	var result strings.Builder
 	files := splitByFiles(diff)
 
 	for _, file := range files {
-		// Always apply hunk truncation for large hunks
 		truncatedFile := truncateFile(file)
 		result.WriteString(truncatedFile)
 
