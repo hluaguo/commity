@@ -12,5 +12,6 @@ commity
 
 # Test
 coverage.out
+coverage.html
 
 !commity/
