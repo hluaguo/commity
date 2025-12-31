@@ -195,7 +195,7 @@ func (r *Repository) DiffStats(files []string) (added, removed int) {
 		for scanner.Scan() {
 			line := scanner.Text()
 			var a, r int
-			fmt.Sscanf(line, "%d\t%d", &a, &r)
+			_, _ = fmt.Sscanf(line, "%d\t%d", &a, &r)
 			added += a
 			removed += r
 		}
