@@ -329,9 +329,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case spinner.TickMsg:
-		var cmd tea.Cmd
-		m.spinner, cmd = m.spinner.Update(msg)
-		return m, cmd
+		// Only update spinner when in states that show it
+		if m.state == stateGenerating || m.state == stateCommitting {
+			var cmd tea.Cmd
+			m.spinner, cmd = m.spinner.Update(msg)
+			return m, cmd
+		}
+		return m, nil
 	}
 
 	switch m.state {
@@ -411,7 +415,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			m.state = stateGenerating
-			return m, m.generateCommitMessage()
+			return m, tea.Batch(m.spinner.Tick, m.generateCommitMessage())
 		}
 
 		return m, cmd
@@ -425,12 +429,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch m.confirmForm.Action() {
 			case "commit":
 				m.state = stateCommitting
-				return m, m.doCommit()
+				return m, tea.Batch(m.spinner.Tick, m.doCommit())
 			case "cancel":
 				return m, tea.Quit
 			case "regenerate":
 				m.state = stateGenerating
-				return m, m.generateCommitMessage()
+				return m, tea.Batch(m.spinner.Tick, m.generateCommitMessage())
 			case "edit":
 				m.state = stateEdit
 				// Initialize textarea with current message
