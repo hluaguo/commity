@@ -54,15 +54,15 @@ func BuildPrompt(files []string, diff string, conventional bool, types []string,
 	var sb strings.Builder
 
 	// Check if this is a regeneration request
-	if previousMsg != "" {
+	if previousMsg == "" {
+		sb.WriteString("Generate a commit message for these changes:\n\n")
+	} else {
 		sb.WriteString("The user wants you to regenerate the commit message.\n\n")
 		sb.WriteString(fmt.Sprintf("Previous message:\n```\n%s\n```\n\n", previousMsg))
 		if feedback != "" {
 			sb.WriteString(fmt.Sprintf("User feedback: %s\n\n", feedback))
 		}
 		sb.WriteString("Generate an improved commit message based on the feedback.\n\n")
-	} else {
-		sb.WriteString("Generate a commit message for these changes:\n\n")
 	}
 
 	sb.WriteString("Files changed:\n")
