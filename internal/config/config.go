@@ -54,8 +54,9 @@ func Default() *Config {
 			SplitThreshold: 5,
 		},
 		AI: AIConfig{
-			Model:   "gpt-4o-mini",
-			BaseURL: "https://api.openai.com/v1",
+			Model:   "",
+			BaseURL: "",
+			APIKey:  "",
 		},
 		Commit: CommitConfig{
 			Conventional: true,
@@ -82,15 +83,15 @@ func Load(path string) (*Config, error) {
 		}
 	}
 
-	// Override with environment variables
-	if key := os.Getenv("OPENAI_API_KEY"); key != "" {
-		cfg.AI.APIKey = key
+	// Environment variables take priority over config file
+	if v := os.Getenv("OPENAI_API_KEY"); v != "" {
+		cfg.AI.APIKey = v
 	}
-	if baseURL := os.Getenv("OPENAI_BASE_URL"); baseURL != "" {
-		cfg.AI.BaseURL = baseURL
+	if v := os.Getenv("OPENAI_BASE_URL"); v != "" {
+		cfg.AI.BaseURL = v
 	}
-	if model := os.Getenv("OPENAI_MODEL"); model != "" {
-		cfg.AI.Model = model
+	if v := os.Getenv("OPENAI_MODEL"); v != "" {
+		cfg.AI.Model = v
 	}
 
 	return cfg, nil
