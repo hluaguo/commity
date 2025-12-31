@@ -63,7 +63,7 @@ var commitTool = openai.Tool{
 				},
 				"subject": map[string]any{
 					"type":        "string",
-					"description": "Short commit subject line (max 72 chars)",
+					"description": "Short commit subject line WITHOUT the type prefix (max 72 chars). Example: 'add user authentication' not 'feat: add user authentication'",
 				},
 				"body": map[string]any{
 					"type":        "string",
@@ -100,7 +100,7 @@ var splitCommitsTool = openai.Tool{
 							},
 							"subject": map[string]any{
 								"type":        "string",
-								"description": "Short commit subject line (max 72 chars)",
+								"description": "Short commit subject line WITHOUT the type prefix (max 72 chars). Example: 'add user authentication' not 'feat: add user authentication'",
 							},
 							"body": map[string]any{
 								"type":        "string",
