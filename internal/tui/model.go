@@ -457,23 +457,51 @@ func (m *Model) View() string {
 		branchStyle := lipgloss.NewStyle().Foreground(m.theme.Primary).Bold(true)
 		s.WriteString(fmt.Sprintf("Branch: %s\n\n", branchStyle.Render(branch)))
 
+		// Get files for this commit
+		commit := m.commits[m.currentIndex]
+		commitFiles := commit.Files
+		if len(commitFiles) == 0 {
+			commitFiles = m.selected
+		}
+
+		// Show files with status
+		s.WriteString(m.styles.Dim.Render("Files:"))
+		s.WriteString("\n")
+		statusStyle := lipgloss.NewStyle().Foreground(m.theme.Success)
+		for _, path := range commitFiles {
+			// Find status for this file
+			status := "M"
+			for _, f := range m.files {
+				if f.Path == path {
+					status = f.Status
+					break
+				}
+			}
+			s.WriteString(fmt.Sprintf("  %s %s\n", statusStyle.Render(status), path))
+		}
+
+		// Show diff stats
+		added, removed := m.repo.DiffStats(commitFiles)
+		statsStyle := lipgloss.NewStyle().Foreground(m.theme.Dim)
+		addStyle := lipgloss.NewStyle().Foreground(m.theme.Success)
+		removeStyle := lipgloss.NewStyle().Foreground(m.theme.Error)
+		s.WriteString(statsStyle.Render(fmt.Sprintf("\n%d files, ", len(commitFiles))))
+		s.WriteString(addStyle.Render(fmt.Sprintf("+%d", added)))
+		s.WriteString(statsStyle.Render(" "))
+		s.WriteString(removeStyle.Render(fmt.Sprintf("-%d", removed)))
+		s.WriteString("\n\n")
+
 		if m.isSplit {
 			s.WriteString(fmt.Sprintf("Commit %d of %d:\n\n", m.currentIndex+1, len(m.commits)))
 		} else {
 			s.WriteString("Commit message:\n\n")
 		}
-		commit := m.commits[m.currentIndex]
 		// Wrap message box to terminal width (minus border padding)
 		msgWidth := m.termWidth - 8
 		if msgWidth < 40 {
 			msgWidth = 40
 		}
 		s.WriteString(m.styles.Message.Width(msgWidth).Render(commit.String()))
-		if m.isSplit && len(commit.Files) > 0 {
-			s.WriteString("\n\n")
-			filesStr := fmt.Sprintf("Files: %s", strings.Join(commit.Files, ", "))
-			s.WriteString(wrapText(m.styles.Dim.Render(filesStr), m.termWidth-2))
-		}
 		s.WriteString("\n\n")
 		s.WriteString(m.confirmForm.View())
 

@@ -173,3 +173,49 @@ func (r *Repository) Branch() string {
 	}
 	return strings.TrimSpace(string(out))
 }
+
+// DiffStats returns lines added and removed for the given files
+func (r *Repository) DiffStats(files []string) (added, removed int) {
+	// Get stats for staged + unstaged
+	for _, staged := range []bool{true, false} {
+		args := []string{"diff", "--numstat"}
+		if staged {
+			args = append(args, "--cached")
+		}
+		args = append(args, "--")
+		args = append(args, files...)
+
+		cmd := exec.Command("git", args...)
+		out, err := cmd.Output()
+		if err != nil {
+			continue
+		}
+
+		scanner := bufio.NewScanner(bytes.NewReader(out))
+		for scanner.Scan() {
+			line := scanner.Text()
+			var a, r int
+			fmt.Sscanf(line, "%d\t%d", &a, &r)
+			added += a
+			removed += r
+		}
+	}
+
+	// For untracked files, count lines
+	for _, f := range files {
+		cmd := exec.Command("git", "ls-files", "--error-unmatch", f)
+		if err := cmd.Run(); err != nil {
+			// File is untracked, count its lines
+			content, err := os.ReadFile(f)
+			if err == nil {
+				lines := bytes.Count(content, []byte("\n"))
+				if len(content) > 0 && content[len(content)-1] != '\n' {
+					lines++
+				}
+				added += lines
+			}
+		}
+	}
+
+	return added, removed
+}
