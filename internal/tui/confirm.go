@@ -140,13 +140,6 @@ func (m *ConfirmModel) View() string {
 	}
 
 	s.WriteString(fmt.Sprintf("%s%s %s", cursor, style.Render("Regenerate:"), inputView))
-	s.WriteString("\n\n")
-
-	// Key hint
-	keyStyle := lipgloss.NewStyle().Foreground(m.theme.Primary).Bold(true)
-	s.WriteString(dimStyle.Render("Press "))
-	s.WriteString(keyStyle.Render("e"))
-	s.WriteString(dimStyle.Render(" to edit message"))
 
 	return s.String()
 }

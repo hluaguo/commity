@@ -126,11 +126,11 @@ func (m *Model) initFileSelectForm() {
 	m.form = huh.NewForm(
 		huh.NewGroup(
 			huh.NewMultiSelect[string]().
-				Title("Select files to commit (space to toggle, enter to confirm)").
+				Title("Select files to commit").
 				Options(options...).
 				Value(&m.selected),
 		),
-	).WithTheme(m.theme.GetHuhTheme())
+	).WithTheme(m.theme.GetHuhTheme()).WithShowHelp(false)
 }
 
 func (m *Model) getThemeOptions() []huh.Option[string] {
@@ -181,7 +181,7 @@ func (m *Model) initSettingsForm() {
 				Value(&m.cfg.AI.CustomInstructions).
 				CharLimit(1000),
 		),
-	).WithTheme(m.theme.GetHuhTheme())
+	).WithTheme(m.theme.GetHuhTheme()).WithShowHelp(false)
 }
 
 func (m *Model) initFirstRunForm() {
@@ -223,7 +223,7 @@ func (m *Model) initFirstRunForm() {
 				Value(&m.cfg.AI.CustomInstructions).
 				CharLimit(500),
 		),
-	).WithTheme(m.theme.GetHuhTheme())
+	).WithTheme(m.theme.GetHuhTheme()).WithShowHelp(false)
 }
 
 func (m *Model) Init() tea.Cmd {
@@ -459,8 +459,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *Model) renderKeyHint(key, desc string) string {
 	keyStyle := lipgloss.NewStyle().
 		Foreground(m.theme.Primary).
-		Bold(true).
-		Padding(0, 1)
+		Bold(true)
 	descStyle := lipgloss.NewStyle().
 		Foreground(m.theme.Secondary)
 	return fmt.Sprintf("%s %s", keyStyle.Render(key), descStyle.Render(desc))
@@ -475,16 +474,26 @@ func (m *Model) View() string {
 	switch m.state {
 	case stateInit:
 		s.WriteString(m.form.View())
+		s.WriteString("\n")
+		s.WriteString(m.renderKeyHint("[↑↓]", "navigate") + "  " +
+			m.renderKeyHint("[enter]", "next"))
 
 	case stateSettings:
 		s.WriteString(m.styles.Dim.Render("Settings (saves on complete)"))
 		s.WriteString("\n\n")
 		s.WriteString(m.form.View())
+		s.WriteString("\n")
+		s.WriteString(m.renderKeyHint("[↑↓]", "navigate") + "  " +
+			m.renderKeyHint("[enter]", "next"))
 
 	case stateFileSelect:
-		s.WriteString(m.renderKeyHint("[s]", "settings") + "  " + m.renderKeyHint("[q]", "quit"))
-		s.WriteString("\n\n")
 		s.WriteString(m.form.View())
+		s.WriteString("\n")
+		s.WriteString(m.renderKeyHint("[space]", "toggle") + "  " +
+			m.renderKeyHint("[↑↓]", "navigate") + "  " +
+			m.renderKeyHint("[enter]", "submit") + "  " +
+			m.renderKeyHint("[s]", "settings") + "  " +
+			m.renderKeyHint("[q]", "quit"))
 
 	case stateGenerating:
 		s.WriteString(m.spinner.View())
@@ -543,18 +552,17 @@ func (m *Model) View() string {
 		s.WriteString(m.styles.Message.Width(msgWidth).Render(commit.String()))
 		s.WriteString("\n\n")
 		s.WriteString(m.confirmForm.View())
+		s.WriteString("\n\n")
+		s.WriteString(m.renderKeyHint("[↑↓]", "navigate") + "  " +
+			m.renderKeyHint("[enter]", "select") + "  " +
+			m.renderKeyHint("[e]", "edit"))
 
 	case stateEdit:
 		s.WriteString(m.styles.Dim.Render("Edit commit message:"))
 		s.WriteString("\n\n")
 		s.WriteString(m.editArea.View())
 		s.WriteString("\n\n")
-		keyStyle := lipgloss.NewStyle().Foreground(m.theme.Primary).Bold(true)
-		s.WriteString(m.styles.Dim.Render("Press "))
-		s.WriteString(keyStyle.Render("Ctrl+S"))
-		s.WriteString(m.styles.Dim.Render(" to save, "))
-		s.WriteString(keyStyle.Render("Esc"))
-		s.WriteString(m.styles.Dim.Render(" to cancel"))
+		s.WriteString(m.renderKeyHint("[ctrl+s]", "save") + "  " + m.renderKeyHint("[esc]", "cancel"))
 
 	case stateCommitting:
 		s.WriteString(m.spinner.View())
