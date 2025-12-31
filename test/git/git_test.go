@@ -105,18 +105,27 @@ func setupTestRepo(t *testing.T) (string, func()) {
 	// Configure git user for commits
 	cmd = exec.Command("git", "config", "user.email", "test@test.com")
 	cmd.Dir = tmpDir
-	cmd.Run()
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("failed to config user.email: %v", err)
+	}
 
 	cmd = exec.Command("git", "config", "user.name", "Test User")
 	cmd.Dir = tmpDir
-	cmd.Run()
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("failed to config user.name: %v", err)
+	}
 
 	// Save current dir and change to temp dir
-	originalDir, _ := os.Getwd()
-	os.Chdir(tmpDir)
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get current dir: %v", err)
+	}
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed to chdir to tmpDir: %v", err)
+	}
 
 	cleanup := func() {
-		os.Chdir(originalDir)
+		_ = os.Chdir(originalDir)
 	}
 
 	return tmpDir, cleanup
@@ -203,11 +212,15 @@ func TestDiffAllWithMixedTrackedAndUntracked(t *testing.T) {
 
 	cmd := exec.Command("git", "add", "tracked.go")
 	cmd.Dir = tmpDir
-	cmd.Run()
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("failed to git add: %v", err)
+	}
 
 	cmd = exec.Command("git", "commit", "-m", "initial commit")
 	cmd.Dir = tmpDir
-	cmd.Run()
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("failed to git commit: %v", err)
+	}
 
 	// Modify the tracked file
 	if err := os.WriteFile(trackedFile, []byte("package main\n\nvar Modified = 2\n"), 0644); err != nil {
