@@ -6,6 +6,7 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/hluaguo/commity/internal/ai"
 	"github.com/hluaguo/commity/internal/config"
 	"github.com/hluaguo/commity/internal/git"

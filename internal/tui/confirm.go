@@ -9,8 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// ConfirmModel is a custom component for the confirm step
-// Shows: Yes - commit, Cancel, Regenerate with inline feedback input
+// ConfirmModel handles the commit confirmation dialog with regenerate feedback.
 type ConfirmModel struct {
 	cursor    int // 0: commit, 1: cancel, 2: regenerate
 	input     textinput.Model

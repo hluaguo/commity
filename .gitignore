@@ -7,6 +7,8 @@ commity
 .vscode/
 .clj-kondo/
 .lsp/
+.claude/
+
 # OS
 .DS_Store
 

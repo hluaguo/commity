@@ -5,8 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/hluaguo/commity/internal/config"
 	openai "github.com/sashabaranov/go-openai"
+
+	"github.com/hluaguo/commity/internal/config"
 )
 
 type Client struct {

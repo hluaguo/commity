@@ -15,7 +15,7 @@ func getTermWidth() int {
 	return width
 }
 
-// Styles holds all the styled components using a theme
+// Styles holds all the styled components using a theme.
 type Styles struct {
 	Title   lipgloss.Style
 	Success lipgloss.Style
