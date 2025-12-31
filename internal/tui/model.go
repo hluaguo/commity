@@ -490,6 +490,7 @@ func (m *Model) View() string {
 		s.WriteString(m.form.View())
 		s.WriteString("\n")
 		s.WriteString(m.renderKeyHint("[space]", "toggle") + "  " +
+			m.renderKeyHint("[ctrl+a]", "all") + "  " +
 			m.renderKeyHint("[↑↓]", "navigate") + "  " +
 			m.renderKeyHint("[enter]", "submit") + "  " +
 			m.renderKeyHint("[s]", "settings") + "  " +
