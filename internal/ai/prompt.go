@@ -17,10 +17,20 @@ Tools:
 - Use submit_commit for a single commit when all changes are related
 - Use split_commits when changes are unrelated and should be separate commits (e.g., a bug fix and a new feature)`
 
-func BuildPrompt(files []string, diff string, conventional bool, types []string, customInstructions string) string {
+func BuildPrompt(files []string, diff string, conventional bool, types []string, customInstructions string, previousMsg string, feedback string) string {
 	var sb strings.Builder
 
-	sb.WriteString("Generate a commit message for these changes:\n\n")
+	// Check if this is a regeneration request
+	if previousMsg != "" {
+		sb.WriteString("The user wants you to regenerate the commit message.\n\n")
+		sb.WriteString(fmt.Sprintf("Previous message:\n```\n%s\n```\n\n", previousMsg))
+		if feedback != "" {
+			sb.WriteString(fmt.Sprintf("User feedback: %s\n\n", feedback))
+		}
+		sb.WriteString("Generate an improved commit message based on the feedback.\n\n")
+	} else {
+		sb.WriteString("Generate a commit message for these changes:\n\n")
+	}
 
 	sb.WriteString("Files changed:\n")
 	for _, f := range files {

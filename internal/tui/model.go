@@ -38,6 +38,7 @@ type Model struct {
 	files    []git.FileStatus
 	selected []string
 	action   string // "commit", "regenerate", "cancel"
+	feedback string // user feedback for regeneration
 
 	// Commit handling (supports split commits)
 	commits      []ai.CommitMessage
@@ -45,10 +46,11 @@ type Model struct {
 	isSplit      bool
 	completed    []bool // track which commits are done
 
-	form      *huh.Form
-	spinner   spinner.Model
-	err       error
-	termWidth int
+	form        *huh.Form
+	confirmForm *ConfirmModel
+	spinner     spinner.Model
+	err         error
+	termWidth   int
 
 	// Theming
 	theme  *Theme
@@ -144,19 +146,7 @@ func (m *Model) getThemeOptions() []huh.Option[string] {
 }
 
 func (m *Model) initConfirmForm() {
-	m.action = "commit"
-	m.form = huh.NewForm(
-		huh.NewGroup(
-			huh.NewSelect[string]().
-				Title("What do you want to do?").
-				Options(
-					huh.NewOption("Yes - commit", "commit"),
-					huh.NewOption("Regenerate message", "regenerate"),
-					huh.NewOption("Cancel", "cancel"),
-				).
-				Value(&m.action),
-		),
-	).WithTheme(m.theme.GetHuhTheme())
+	m.confirmForm = NewConfirmModel(m.theme)
 }
 
 func (m *Model) initSettingsForm() {
@@ -290,7 +280,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.completed = make([]bool, len(m.commits))
 		m.state = stateConfirm
 		m.initConfirmForm()
-		return m, m.form.Init()
+		return m, m.confirmForm.Init()
 
 	case commitMsg:
 		if msg.err != nil {
@@ -305,7 +295,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.currentIndex < len(m.commits) {
 			m.state = stateConfirm
 			m.initConfirmForm()
-			return m, m.form.Init()
+			return m, m.confirmForm.Init()
 		}
 
 		m.state = stateDone
@@ -400,21 +390,20 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 
 	case stateConfirm:
-		form, cmd := m.form.Update(msg)
-		if f, ok := form.(*huh.Form); ok {
-			m.form = f
-		}
+		var cmd tea.Cmd
+		m.confirmForm, cmd = m.confirmForm.Update(msg)
 
-		if m.form.State == huh.StateCompleted {
-			switch m.action {
+		if m.confirmForm.Submitted() {
+			m.feedback = m.confirmForm.Feedback()
+			switch m.confirmForm.Action() {
 			case "commit":
 				m.state = stateCommitting
 				return m, m.doCommit()
+			case "cancel":
+				return m, tea.Quit
 			case "regenerate":
 				m.state = stateGenerating
 				return m, m.generateCommitMessage()
-			case "cancel":
-				return m, tea.Quit
 			}
 		}
 
@@ -483,7 +472,7 @@ func (m *Model) View() string {
 			s.WriteString(wrapText(m.styles.Dim.Render(filesStr), m.termWidth-2))
 		}
 		s.WriteString("\n\n")
-		s.WriteString(m.form.View())
+		s.WriteString(m.confirmForm.View())
 
 	case stateCommitting:
 		s.WriteString(m.spinner.View())
@@ -512,6 +501,13 @@ func (m *Model) View() string {
 }
 
 func (m *Model) generateCommitMessage() tea.Cmd {
+	// Capture previous message for regeneration context
+	var previousMsg string
+	if len(m.commits) > 0 && m.currentIndex < len(m.commits) {
+		previousMsg = m.commits[m.currentIndex].String()
+	}
+	feedback := m.feedback
+
 	return func() tea.Msg {
 		diff, err := m.repo.DiffAll(m.selected)
 		if err != nil {
@@ -525,6 +521,8 @@ func (m *Model) generateCommitMessage() tea.Cmd {
 			m.cfg.Commit.Conventional,
 			m.cfg.Commit.Types,
 			m.cfg.AI.CustomInstructions,
+			previousMsg,
+			feedback,
 		)
 
 		return generateMsg{result: result, err: err}
