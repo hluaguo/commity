@@ -37,7 +37,6 @@ type Model struct {
 
 	files    []git.FileStatus
 	selected []string
-	action   string // "commit", "regenerate", "cancel"
 	feedback string // user feedback for regeneration
 
 	// Commit handling (supports split commits)
