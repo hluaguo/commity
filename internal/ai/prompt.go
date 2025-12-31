@@ -17,7 +17,7 @@ Tools:
 - Use submit_commit for a single commit when all changes are related
 - Use split_commits when changes are unrelated and should be separate commits (e.g., a bug fix and a new feature)`
 
-func BuildPrompt(files []string, diff string, conventional bool, types []string) string {
+func BuildPrompt(files []string, diff string, conventional bool, types []string, customInstructions string) string {
 	var sb strings.Builder
 
 	sb.WriteString("Generate a commit message for these changes:\n\n")
@@ -39,7 +39,11 @@ func BuildPrompt(files []string, diff string, conventional bool, types []string)
 		sb.WriteString(fmt.Sprintf("\nUse conventional commit format with one of these types: %s\n", strings.Join(types, ", ")))
 	}
 
-	sb.WriteString("\nAnalyze the changes and decide: use submit_commit for related changes, or split_commits if changes should be separate commits.")
+	if customInstructions != "" {
+		sb.WriteString(fmt.Sprintf("\nAdditional instructions: %s\n", customInstructions))
+	}
+
+	sb.WriteString("\nAnalyze the changes and decide: use `submit_commit` for related changes, or `split_commits` if changes should be separate commits.")
 
 	return sb.String()
 }

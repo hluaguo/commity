@@ -143,8 +143,8 @@ type GenerateResult struct {
 	IsSplit bool
 }
 
-func (c *Client) GenerateCommitMessage(ctx context.Context, files []string, diff string, conventional bool, types []string) (*GenerateResult, error) {
-	prompt := BuildPrompt(files, diff, conventional, types)
+func (c *Client) GenerateCommitMessage(ctx context.Context, files []string, diff string, conventional bool, types []string, customInstructions string) (*GenerateResult, error) {
+	prompt := BuildPrompt(files, diff, conventional, types, customInstructions)
 
 	resp, err := c.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
 		Model: c.model,

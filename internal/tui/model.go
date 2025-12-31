@@ -17,23 +17,27 @@ import (
 type state int
 
 const (
-	stateFileSelect state = iota
+	stateInit       state = iota // first run setup
+	stateFileSelect              // file selection
 	stateGenerating
 	stateConfirm
 	stateCommitting
 	stateDone
+	stateSettings // settings page
 	stateError
 )
 
 type Model struct {
-	state    state
-	cfg      *config.Config
-	repo     *git.Repository
-	aiClient *ai.Client
+	state         state
+	previousState state // for returning from settings
+	cfg           *config.Config
+	repo          *git.Repository
+	aiClient      *ai.Client
+	isFirstRun    bool
 
-	files     []git.FileStatus
-	selected  []string
-	confirmed bool
+	files    []git.FileStatus
+	selected []string
+	action   string // "commit", "regenerate", "cancel"
 
 	// Commit handling (supports split commits)
 	commits      []ai.CommitMessage
@@ -56,7 +60,28 @@ type commitMsg struct {
 	err error
 }
 
-func New(cfg *config.Config, repo *git.Repository, aiClient *ai.Client) (*Model, error) {
+func New(cfg *config.Config, repo *git.Repository, aiClient *ai.Client, isFirstRun bool) (*Model, error) {
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+
+	m := &Model{
+		cfg:        cfg,
+		repo:       repo,
+		aiClient:   aiClient,
+		spinner:    s,
+		termWidth:  getTermWidth(),
+		isFirstRun: isFirstRun,
+	}
+
+	// First run - show setup
+	if isFirstRun {
+		m.state = stateInit
+		m.initFirstRunForm()
+		return m, nil
+	}
+
+	// Normal run - need files
 	files, err := repo.Status()
 	if err != nil {
 		return nil, err
@@ -66,20 +91,8 @@ func New(cfg *config.Config, repo *git.Repository, aiClient *ai.Client) (*Model,
 		return nil, fmt.Errorf("no changes to commit")
 	}
 
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-
-	m := &Model{
-		state:     stateFileSelect,
-		cfg:       cfg,
-		repo:      repo,
-		aiClient:  aiClient,
-		files:     files,
-		spinner:   s,
-		termWidth: getTermWidth(),
-	}
-
+	m.files = files
+	m.state = stateFileSelect
 	m.initFileSelectForm()
 	return m, nil
 }
@@ -108,14 +121,80 @@ func (m *Model) initFileSelectForm() {
 }
 
 func (m *Model) initConfirmForm() {
-	m.confirmed = true // default to yes
+	m.action = "commit"
 	m.form = huh.NewForm(
 		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("What do you want to do?").
+				Options(
+					huh.NewOption("Yes - commit", "commit"),
+					huh.NewOption("Regenerate message", "regenerate"),
+					huh.NewOption("Cancel", "cancel"),
+				).
+				Value(&m.action),
+		),
+	).WithTheme(huh.ThemeDracula())
+}
+
+func (m *Model) initSettingsForm() {
+	m.form = huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title("API Base URL").
+				Value(&m.cfg.AI.BaseURL),
+			huh.NewInput().
+				Title("API Key").
+				Value(&m.cfg.AI.APIKey).
+				EchoMode(huh.EchoModePassword),
+			huh.NewInput().
+				Title("Model").
+				Value(&m.cfg.AI.Model),
+		),
+		huh.NewGroup(
 			huh.NewConfirm().
-				Title("Commit with this message?").
+				Title("Use Conventional Commits?").
+				Value(&m.cfg.Commit.Conventional),
+			huh.NewText().
+				Title("Custom Instructions").
+				Description("Additional instructions for AI").
+				Value(&m.cfg.AI.CustomInstructions).
+				CharLimit(500),
+		),
+	).WithTheme(huh.ThemeDracula())
+}
+
+func (m *Model) initFirstRunForm() {
+	m.form = huh.NewForm(
+		huh.NewGroup(
+			huh.NewNote().
+				Title("Welcome to Commity!").
+				Description("Let's set up your configuration."),
+		),
+		huh.NewGroup(
+			huh.NewInput().
+				Title("API Base URL").
+				Description("OpenAI-compatible API endpoint").
+				Value(&m.cfg.AI.BaseURL),
+			huh.NewInput().
+				Title("API Key").
+				Value(&m.cfg.AI.APIKey).
+				EchoMode(huh.EchoModePassword),
+			huh.NewInput().
+				Title("Model").
+				Description("e.g., gpt-4o-mini, claude-3-sonnet").
+				Value(&m.cfg.AI.Model),
+		),
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title("Use Conventional Commits?").
 				Affirmative("Yes").
 				Negative("No").
-				Value(&m.confirmed),
+				Value(&m.cfg.Commit.Conventional),
+			huh.NewText().
+				Title("Custom Instructions (optional)").
+				Description("Additional instructions for commit generation").
+				Value(&m.cfg.AI.CustomInstructions).
+				CharLimit(500),
 		),
 	).WithTheme(huh.ThemeDracula())
 }
@@ -124,12 +203,45 @@ func (m *Model) Init() tea.Cmd {
 	return tea.Batch(m.form.Init(), m.spinner.Tick)
 }
 
+type initCompleteMsg struct{}
+
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		if msg.String() == "ctrl+c" || msg.String() == "q" {
+		switch msg.String() {
+		case "ctrl+c":
 			return m, tea.Quit
+		case "q":
+			if m.state != stateInit && m.state != stateSettings {
+				return m, tea.Quit
+			}
+		case "s", "S":
+			// Open settings from file select
+			if m.state == stateFileSelect {
+				m.previousState = m.state
+				m.state = stateSettings
+				m.initSettingsForm()
+				return m, m.form.Init()
+			}
 		}
+
+	case initCompleteMsg:
+		// After first run setup, reload and continue
+		files, err := m.repo.Status()
+		if err != nil {
+			m.state = stateError
+			m.err = err
+			return m, nil
+		}
+		if len(files) == 0 {
+			m.state = stateError
+			m.err = fmt.Errorf("no changes to commit")
+			return m, nil
+		}
+		m.files = files
+		m.state = stateFileSelect
+		m.initFileSelectForm()
+		return m, m.form.Init()
 
 	case generateMsg:
 		if msg.err != nil {
@@ -171,6 +283,61 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	switch m.state {
+	case stateInit:
+		form, cmd := m.form.Update(msg)
+		if f, ok := form.(*huh.Form); ok {
+			m.form = f
+		}
+
+		if m.form.State == huh.StateCompleted {
+			// Save config and continue
+			if err := m.cfg.Save(); err != nil {
+				m.state = stateError
+				m.err = fmt.Errorf("failed to save config: %w", err)
+				return m, nil
+			}
+			// Reinitialize AI client with new config
+			newClient, err := ai.New(&m.cfg.AI)
+			if err != nil {
+				m.state = stateError
+				m.err = err
+				return m, nil
+			}
+			m.aiClient = newClient
+			return m, func() tea.Msg { return initCompleteMsg{} }
+		}
+
+		return m, cmd
+
+	case stateSettings:
+		form, cmd := m.form.Update(msg)
+		if f, ok := form.(*huh.Form); ok {
+			m.form = f
+		}
+
+		if m.form.State == huh.StateCompleted {
+			// Save config
+			if err := m.cfg.Save(); err != nil {
+				m.state = stateError
+				m.err = fmt.Errorf("failed to save config: %w", err)
+				return m, nil
+			}
+			// Reinitialize AI client with new config
+			newClient, err := ai.New(&m.cfg.AI)
+			if err != nil {
+				m.state = stateError
+				m.err = err
+				return m, nil
+			}
+			m.aiClient = newClient
+			// Return to previous state
+			m.state = m.previousState
+			m.initFileSelectForm()
+			return m, m.form.Init()
+		}
+
+		return m, cmd
+
 	case stateFileSelect:
 		form, cmd := m.form.Update(msg)
 		if f, ok := form.(*huh.Form); ok {
@@ -196,13 +363,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if m.form.State == huh.StateCompleted {
-			if m.confirmed {
+			switch m.action {
+			case "commit":
 				m.state = stateCommitting
 				return m, m.doCommit()
+			case "regenerate":
+				m.state = stateGenerating
+				return m, m.generateCommitMessage()
+			case "cancel":
+				return m, tea.Quit
 			}
-			// User said no - regenerate
-			m.state = stateGenerating
-			return m, m.generateCommitMessage()
 		}
 
 		return m, cmd
@@ -223,7 +393,17 @@ func (m *Model) View() string {
 	s.WriteString("\n\n")
 
 	switch m.state {
+	case stateInit:
+		s.WriteString(m.form.View())
+
+	case stateSettings:
+		s.WriteString(dimStyle.Render("Settings (saves on complete)"))
+		s.WriteString("\n\n")
+		s.WriteString(m.form.View())
+
 	case stateFileSelect:
+		s.WriteString(dimStyle.Render("Press 's' for settings"))
+		s.WriteString("\n\n")
 		s.WriteString(m.form.View())
 
 	case stateGenerating:
@@ -290,6 +470,7 @@ func (m *Model) generateCommitMessage() tea.Cmd {
 			diff,
 			m.cfg.Commit.Conventional,
 			m.cfg.Commit.Types,
+			m.cfg.AI.CustomInstructions,
 		)
 
 		return generateMsg{result: result, err: err}

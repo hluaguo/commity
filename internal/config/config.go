@@ -20,14 +20,26 @@ type GeneralConfig struct {
 }
 
 type AIConfig struct {
-	Model   string `toml:"model"`
-	BaseURL string `toml:"base_url"`
-	APIKey  string `toml:"api_key"`
+	Model              string `toml:"model"`
+	BaseURL            string `toml:"base_url"`
+	APIKey             string `toml:"api_key"`
+	CustomInstructions string `toml:"custom_instructions"` // custom prompt additions
 }
 
 type CommitConfig struct {
 	Conventional bool     `toml:"conventional"`
 	Types        []string `toml:"types"`
+}
+
+// ConfigPath returns the path to the config file
+func ConfigPath() string {
+	return filepath.Join(xdg.ConfigHome, "commity", "config.toml")
+}
+
+// Exists checks if config file exists
+func Exists() bool {
+	_, err := os.Stat(ConfigPath())
+	return err == nil
 }
 
 func Default() *Config {
@@ -74,4 +86,24 @@ func Load(path string) (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// Save writes the config to file
+func (c *Config) Save() error {
+	path := ConfigPath()
+
+	// Create directory if not exists
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	encoder := toml.NewEncoder(f)
+	return encoder.Encode(c)
 }
