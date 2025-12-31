@@ -16,6 +16,10 @@ import (
 	"github.com/hluaguo/commity/internal/git"
 )
 
+// ---------------------------------------------------------------------------
+// Types and Constants
+// ---------------------------------------------------------------------------
+
 type state int
 
 const (
@@ -29,6 +33,26 @@ const (
 	stateSettings // settings page
 	stateError
 )
+
+// Confirm form actions
+const (
+	actionCommit     = "commit"
+	actionCancel     = "cancel"
+	actionRegenerate = "regenerate"
+	actionEdit       = "edit"
+)
+
+// Layout constants
+const (
+	minMessageWidth = 40
+	messagePadding  = 8
+	editAreaHeight  = 10
+	editAreaPadding = 4
+)
+
+// ---------------------------------------------------------------------------
+// Model
+// ---------------------------------------------------------------------------
 
 type Model struct {
 	state         state
@@ -60,6 +84,7 @@ type Model struct {
 	styles *Styles
 }
 
+// Messages for async operations
 type generateMsg struct {
 	result *ai.GenerateResult
 	err    error
@@ -68,6 +93,12 @@ type generateMsg struct {
 type commitMsg struct {
 	err error
 }
+
+type initCompleteMsg struct{}
+
+// ---------------------------------------------------------------------------
+// Constructor
+// ---------------------------------------------------------------------------
 
 func New(cfg *config.Config, repo *git.Repository, aiClient *ai.Client, isFirstRun bool) (*Model, error) {
 	theme := GetTheme(cfg.UI.Theme)
@@ -111,8 +142,11 @@ func New(cfg *config.Config, repo *git.Repository, aiClient *ai.Client, isFirstR
 	return m, nil
 }
 
+// ---------------------------------------------------------------------------
+// Form Initialization
+// ---------------------------------------------------------------------------
+
 func (m *Model) initFileSelectForm() {
-	// Build tree structure and get formatted options
 	options, selectedPaths := m.buildFileTreeOptions()
 
 	m.selected = selectedPaths
@@ -168,86 +202,126 @@ func (m *Model) initConfirmForm() {
 	m.confirmForm = NewConfirmModel(m.theme)
 }
 
-func (m *Model) initSettingsForm() {
-	m.form = huh.NewForm(
-		huh.NewGroup(
-			huh.NewInput().
-				Title("API Base URL").
-				Value(&m.cfg.AI.BaseURL),
-			huh.NewInput().
-				Title("API Key").
-				Value(&m.cfg.AI.APIKey).
-				EchoMode(huh.EchoModePassword),
-			huh.NewInput().
-				Title("Model").
-				Value(&m.cfg.AI.Model),
-		),
-		huh.NewGroup(
-			huh.NewConfirm().
-				Title("Use Conventional Commits?").
-				Value(&m.cfg.Commit.Conventional),
-			huh.NewSelect[string]().
-				Title("Theme").
-				Options(m.getThemeOptions()...).
-				Value(&m.cfg.UI.Theme),
-		),
-		huh.NewGroup(
-			huh.NewText().
-				Title("Custom Instructions").
-				Description("Additional instructions for AI").
-				Value(&m.cfg.AI.CustomInstructions).
-				CharLimit(1000),
-		),
-	).WithTheme(m.theme.GetHuhTheme()).WithShowHelp(false)
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+// applyConfigChanges saves config, refreshes theme, and reinitializes AI client
+func (m *Model) applyConfigChanges() error {
+	if err := m.cfg.Save(); err != nil {
+		return fmt.Errorf("failed to save config: %w", err)
+	}
+
+	// Refresh theme
+	m.theme = GetTheme(m.cfg.UI.Theme)
+	m.styles = NewStyles(m.theme)
+	m.spinner.Style = lipgloss.NewStyle().Foreground(m.theme.Primary)
+
+	// Reinitialize AI client with new config
+	newClient, err := ai.New(&m.cfg.AI)
+	if err != nil {
+		return err
+	}
+	m.aiClient = newClient
+
+	return nil
 }
 
-func (m *Model) initFirstRunForm() {
-	m.form = huh.NewForm(
-		huh.NewGroup(
+// setError transitions to error state and returns the model with no command
+func (m *Model) setError(err error) (tea.Model, tea.Cmd) {
+	m.state = stateError
+	m.err = err
+	return m, nil
+}
+
+// updateForm updates the form and returns the command
+func (m *Model) updateForm(msg tea.Msg) tea.Cmd {
+	form, cmd := m.form.Update(msg)
+	if f, ok := form.(*huh.Form); ok {
+		m.form = f
+	}
+	return cmd
+}
+
+// getFileStatus returns the git status for a file path
+func (m *Model) getFileStatus(path string) string {
+	for _, f := range m.files {
+		if f.Path == path {
+			return f.Status
+		}
+	}
+	return "M" // default to modified
+}
+
+// initConfigForm creates the settings/first-run configuration form
+func (m *Model) initConfigForm(showWelcome bool) {
+	var groups []*huh.Group
+
+	// Add welcome note for first run
+	if showWelcome {
+		groups = append(groups, huh.NewGroup(
 			huh.NewNote().
 				Title("Welcome to Commity!").
 				Description("Let's set up your configuration."),
-		),
-		huh.NewGroup(
-			huh.NewInput().
-				Title("API Base URL").
-				Description("OpenAI-compatible API endpoint").
-				Value(&m.cfg.AI.BaseURL),
-			huh.NewInput().
-				Title("API Key").
-				Value(&m.cfg.AI.APIKey).
-				EchoMode(huh.EchoModePassword),
-			huh.NewInput().
-				Title("Model").
-				Description("e.g., gpt-4o-mini, claude-3-sonnet").
-				Value(&m.cfg.AI.Model),
-		),
-		huh.NewGroup(
-			huh.NewConfirm().
-				Title("Use Conventional Commits?").
-				Affirmative("Yes").
-				Negative("No").
-				Value(&m.cfg.Commit.Conventional),
-			huh.NewSelect[string]().
-				Title("Theme").
-				Options(m.getThemeOptions()...).
-				Value(&m.cfg.UI.Theme),
-		),
-		huh.NewGroup(
-			huh.NewText().
-				Title("Custom Instructions (optional)").
-				Description("Additional instructions for commit generation").
-				Value(&m.cfg.AI.CustomInstructions).
-				CharLimit(500),
-		),
-	).WithTheme(m.theme.GetHuhTheme()).WithShowHelp(false)
+		))
+	}
+
+	// API settings group
+	groups = append(groups, huh.NewGroup(
+		huh.NewInput().
+			Title("API Base URL").
+			Description("OpenAI-compatible API endpoint").
+			Value(&m.cfg.AI.BaseURL),
+		huh.NewInput().
+			Title("API Key").
+			Value(&m.cfg.AI.APIKey).
+			EchoMode(huh.EchoModePassword),
+		huh.NewInput().
+			Title("Model").
+			Description("e.g., gpt-4o-mini, claude-3-sonnet").
+			Value(&m.cfg.AI.Model),
+	))
+
+	// Commit settings group
+	groups = append(groups, huh.NewGroup(
+		huh.NewConfirm().
+			Title("Use Conventional Commits?").
+			Affirmative("Yes").
+			Negative("No").
+			Value(&m.cfg.Commit.Conventional),
+		huh.NewSelect[string]().
+			Title("Theme").
+			Options(m.getThemeOptions()...).
+			Value(&m.cfg.UI.Theme),
+	))
+
+	// Custom instructions group
+	groups = append(groups, huh.NewGroup(
+		huh.NewText().
+			Title("Custom Instructions").
+			Description("Additional instructions for AI (optional)").
+			Value(&m.cfg.AI.CustomInstructions).
+			CharLimit(1000),
+	))
+
+	m.form = huh.NewForm(groups...).WithTheme(m.theme.GetHuhTheme()).WithShowHelp(false)
 }
+
+func (m *Model) initSettingsForm() {
+	m.initConfigForm(false)
+}
+
+func (m *Model) initFirstRunForm() {
+	m.initConfigForm(true)
+}
+
+// ---------------------------------------------------------------------------
+// Bubble Tea Interface
+// ---------------------------------------------------------------------------
 
 func (m *Model) Init() tea.Cmd {
 	return tea.Batch(m.form.Init(), m.spinner.Tick)
 }
-
-type initCompleteMsg struct{}
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -281,14 +355,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// After first run setup, reload and continue
 		files, err := m.repo.Status()
 		if err != nil {
-			m.state = stateError
-			m.err = err
-			return m, nil
+			return m.setError(err)
 		}
 		if len(files) == 0 {
-			m.state = stateError
-			m.err = fmt.Errorf("no changes to commit")
-			return m, nil
+			return m.setError(fmt.Errorf("no changes to commit"))
 		}
 		m.files = files
 		m.state = stateFileSelect
@@ -297,9 +367,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case generateMsg:
 		if msg.err != nil {
-			m.state = stateError
-			m.err = msg.err
-			return m, nil
+			return m.setError(msg.err)
 		}
 		m.commits = msg.result.Commits
 		m.isSplit = msg.result.IsSplit
@@ -311,9 +379,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case commitMsg:
 		if msg.err != nil {
-			m.state = stateError
-			m.err = msg.err
-			return m, nil
+			return m.setError(msg.err)
 		}
 		m.completed[m.currentIndex] = true
 		m.currentIndex++
@@ -340,84 +406,36 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch m.state {
 	case stateInit:
-		form, cmd := m.form.Update(msg)
-		if f, ok := form.(*huh.Form); ok {
-			m.form = f
-		}
-
+		cmd := m.updateForm(msg)
 		if m.form.State == huh.StateCompleted {
-			// Save config and continue
-			if err := m.cfg.Save(); err != nil {
-				m.state = stateError
-				m.err = fmt.Errorf("failed to save config: %w", err)
-				return m, nil
+			if err := m.applyConfigChanges(); err != nil {
+				return m.setError(err)
 			}
-			// Refresh theme
-			m.theme = GetTheme(m.cfg.UI.Theme)
-			m.styles = NewStyles(m.theme)
-			m.spinner.Style = lipgloss.NewStyle().Foreground(m.theme.Primary)
-			// Reinitialize AI client with new config
-			newClient, err := ai.New(&m.cfg.AI)
-			if err != nil {
-				m.state = stateError
-				m.err = err
-				return m, nil
-			}
-			m.aiClient = newClient
 			return m, func() tea.Msg { return initCompleteMsg{} }
 		}
-
 		return m, cmd
 
 	case stateSettings:
-		form, cmd := m.form.Update(msg)
-		if f, ok := form.(*huh.Form); ok {
-			m.form = f
-		}
-
+		cmd := m.updateForm(msg)
 		if m.form.State == huh.StateCompleted {
-			// Save config
-			if err := m.cfg.Save(); err != nil {
-				m.state = stateError
-				m.err = fmt.Errorf("failed to save config: %w", err)
-				return m, nil
+			if err := m.applyConfigChanges(); err != nil {
+				return m.setError(err)
 			}
-			// Refresh theme
-			m.theme = GetTheme(m.cfg.UI.Theme)
-			m.styles = NewStyles(m.theme)
-			m.spinner.Style = lipgloss.NewStyle().Foreground(m.theme.Primary)
-			// Reinitialize AI client with new config
-			newClient, err := ai.New(&m.cfg.AI)
-			if err != nil {
-				m.state = stateError
-				m.err = err
-				return m, nil
-			}
-			m.aiClient = newClient
-			// Return to previous state
 			m.state = m.previousState
 			m.initFileSelectForm()
 			return m, m.form.Init()
 		}
-
 		return m, cmd
 
 	case stateFileSelect:
-		form, cmd := m.form.Update(msg)
-		if f, ok := form.(*huh.Form); ok {
-			m.form = f
-		}
-
+		cmd := m.updateForm(msg)
 		if m.form.State == huh.StateCompleted {
 			if len(m.selected) == 0 {
-				m.state = stateError
-				m.err = fmt.Errorf("no files selected")
-				return m, nil
+				return m.setError(fmt.Errorf("no files selected"))
 			}
 			m.state = stateGenerating
 			return m, tea.Batch(m.spinner.Tick, m.generateCommitMessage())
 		}
-
 		return m, cmd
 
 	case stateConfirm:
@@ -427,22 +445,21 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.confirmForm.Submitted() {
 			m.feedback = m.confirmForm.Feedback()
 			switch m.confirmForm.Action() {
-			case "commit":
+			case actionCommit:
 				m.state = stateCommitting
 				return m, tea.Batch(m.spinner.Tick, m.doCommit())
-			case "cancel":
+			case actionCancel:
 				return m, tea.Quit
-			case "regenerate":
+			case actionRegenerate:
 				m.state = stateGenerating
 				return m, tea.Batch(m.spinner.Tick, m.generateCommitMessage())
-			case "edit":
+			case actionEdit:
 				m.state = stateEdit
-				// Initialize textarea with current message
 				ta := textarea.New()
 				ta.SetValue(m.commits[m.currentIndex].String())
 				ta.Focus()
-				ta.SetWidth(m.termWidth - 4)
-				ta.SetHeight(10)
+				ta.SetWidth(m.termWidth - editAreaPadding)
+				ta.SetHeight(editAreaHeight)
 				m.editArea = ta
 				return m, textarea.Blink
 			}
@@ -485,6 +502,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// ---------------------------------------------------------------------------
+// View Helpers
+// ---------------------------------------------------------------------------
+
 func (m *Model) renderKeyHint(key, desc string) string {
 	keyStyle := lipgloss.NewStyle().
 		Foreground(m.theme.Primary).
@@ -492,6 +513,79 @@ func (m *Model) renderKeyHint(key, desc string) string {
 	descStyle := lipgloss.NewStyle().
 		Foreground(m.theme.Secondary)
 	return fmt.Sprintf("%s %s", keyStyle.Render(key), descStyle.Render(desc))
+}
+
+// viewConfirm renders the commit confirmation view
+func (m *Model) viewConfirm(s *strings.Builder) {
+	// Show branch
+	branch := m.repo.Branch()
+	branchStyle := lipgloss.NewStyle().Foreground(m.theme.Primary).Bold(true)
+	s.WriteString(fmt.Sprintf("Branch: %s\n\n", branchStyle.Render(branch)))
+
+	// Get files for this commit
+	commit := m.commits[m.currentIndex]
+	commitFiles := commit.Files
+	if len(commitFiles) == 0 {
+		commitFiles = m.selected
+	}
+
+	// Show files with status
+	s.WriteString(m.styles.Dim.Render("Files:"))
+	s.WriteString("\n")
+	statusStyle := lipgloss.NewStyle().Foreground(m.theme.Success)
+	for _, path := range commitFiles {
+		status := m.getFileStatus(path)
+		s.WriteString(fmt.Sprintf("  %s %s\n", statusStyle.Render(status), path))
+	}
+
+	// Show diff stats
+	added, removed := m.repo.DiffStats(commitFiles)
+	statsStyle := lipgloss.NewStyle().Foreground(m.theme.Dim)
+	addStyle := lipgloss.NewStyle().Foreground(m.theme.Success)
+	removeStyle := lipgloss.NewStyle().Foreground(m.theme.Error)
+	s.WriteString(statsStyle.Render(fmt.Sprintf("\n%d files, ", len(commitFiles))))
+	s.WriteString(addStyle.Render(fmt.Sprintf("+%d", added)))
+	s.WriteString(statsStyle.Render(" "))
+	s.WriteString(removeStyle.Render(fmt.Sprintf("-%d", removed)))
+	s.WriteString("\n\n")
+
+	// Show commit message
+	if m.isSplit {
+		s.WriteString(fmt.Sprintf("Commit %d of %d:\n\n", m.currentIndex+1, len(m.commits)))
+	} else {
+		s.WriteString("Commit message:\n\n")
+	}
+	msgWidth := m.termWidth - messagePadding
+	if msgWidth < minMessageWidth {
+		msgWidth = minMessageWidth
+	}
+	s.WriteString(m.styles.Message.Width(msgWidth).Render(commit.String()))
+	s.WriteString("\n\n")
+	s.WriteString(m.confirmForm.View())
+	s.WriteString("\n\n")
+	s.WriteString(m.renderKeyHint("[↑↓]", "navigate") + "  " +
+		m.renderKeyHint("[enter]", "select") + "  " +
+		m.renderKeyHint("[e]", "edit"))
+}
+
+// viewDone renders the completion view
+func (m *Model) viewDone(s *strings.Builder) {
+	if m.isSplit {
+		s.WriteString(m.styles.Success.Render(fmt.Sprintf("Created %d commits successfully!", len(m.commits))))
+	} else {
+		s.WriteString(m.styles.Success.Render("Committed successfully! Do not forget to push"))
+	}
+	s.WriteString("\n\n")
+	for i, c := range m.commits {
+		if m.completed[i] {
+			msg := c.String()
+			if idx := strings.Index(msg, "\n"); idx != -1 {
+				msg = msg[:idx]
+			}
+			s.WriteString(m.styles.Dim.Render(fmt.Sprintf("  %s", msg)))
+			s.WriteString("\n")
+		}
+	}
 }
 
 func (m *Model) View() string {
@@ -530,62 +624,7 @@ func (m *Model) View() string {
 		s.WriteString(" Generating commit message...")
 
 	case stateConfirm:
-		// Show branch
-		branch := m.repo.Branch()
-		branchStyle := lipgloss.NewStyle().Foreground(m.theme.Primary).Bold(true)
-		s.WriteString(fmt.Sprintf("Branch: %s\n\n", branchStyle.Render(branch)))
-
-		// Get files for this commit
-		commit := m.commits[m.currentIndex]
-		commitFiles := commit.Files
-		if len(commitFiles) == 0 {
-			commitFiles = m.selected
-		}
-
-		// Show files with status
-		s.WriteString(m.styles.Dim.Render("Files:"))
-		s.WriteString("\n")
-		statusStyle := lipgloss.NewStyle().Foreground(m.theme.Success)
-		for _, path := range commitFiles {
-			// Find status for this file
-			status := "M"
-			for _, f := range m.files {
-				if f.Path == path {
-					status = f.Status
-					break
-				}
-			}
-			s.WriteString(fmt.Sprintf("  %s %s\n", statusStyle.Render(status), path))
-		}
-
-		// Show diff stats
-		added, removed := m.repo.DiffStats(commitFiles)
-		statsStyle := lipgloss.NewStyle().Foreground(m.theme.Dim)
-		addStyle := lipgloss.NewStyle().Foreground(m.theme.Success)
-		removeStyle := lipgloss.NewStyle().Foreground(m.theme.Error)
-		s.WriteString(statsStyle.Render(fmt.Sprintf("\n%d files, ", len(commitFiles))))
-		s.WriteString(addStyle.Render(fmt.Sprintf("+%d", added)))
-		s.WriteString(statsStyle.Render(" "))
-		s.WriteString(removeStyle.Render(fmt.Sprintf("-%d", removed)))
-		s.WriteString("\n\n")
-
-		if m.isSplit {
-			s.WriteString(fmt.Sprintf("Commit %d of %d:\n\n", m.currentIndex+1, len(m.commits)))
-		} else {
-			s.WriteString("Commit message:\n\n")
-		}
-		// Wrap message box to terminal width (minus border padding)
-		msgWidth := m.termWidth - 8
-		if msgWidth < 40 {
-			msgWidth = 40
-		}
-		s.WriteString(m.styles.Message.Width(msgWidth).Render(commit.String()))
-		s.WriteString("\n\n")
-		s.WriteString(m.confirmForm.View())
-		s.WriteString("\n\n")
-		s.WriteString(m.renderKeyHint("[↑↓]", "navigate") + "  " +
-			m.renderKeyHint("[enter]", "select") + "  " +
-			m.renderKeyHint("[e]", "edit"))
+		m.viewConfirm(&s)
 
 	case stateEdit:
 		s.WriteString(m.styles.Dim.Render("Edit commit message:"))
@@ -599,23 +638,7 @@ func (m *Model) View() string {
 		s.WriteString(" Committing...")
 
 	case stateDone:
-		if m.isSplit {
-			s.WriteString(m.styles.Success.Render(fmt.Sprintf("Created %d commits successfully!", len(m.commits))))
-		} else {
-			s.WriteString(m.styles.Success.Render("Committed successfully! Do not forget to push"))
-		}
-		s.WriteString("\n\n")
-		for i, c := range m.commits {
-			if m.completed[i] {
-				// Show only the subject line (first line) for cleaner output
-				msg := c.String()
-				if idx := strings.Index(msg, "\n"); idx != -1 {
-					msg = msg[:idx]
-				}
-				s.WriteString(m.styles.Dim.Render(fmt.Sprintf("  %s", msg)))
-				s.WriteString("\n")
-			}
-		}
+		m.viewDone(&s)
 
 	case stateError:
 		s.WriteString(wrapText(m.styles.Error.Render(fmt.Sprintf("Error: %v", m.err)), m.termWidth-2))
@@ -626,6 +649,10 @@ func (m *Model) View() string {
 	s.WriteString("\n")
 	return s.String()
 }
+
+// ---------------------------------------------------------------------------
+// Commands
+// ---------------------------------------------------------------------------
 
 func (m *Model) generateCommitMessage() tea.Cmd {
 	// Capture previous message for regeneration context
