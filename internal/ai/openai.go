@@ -186,11 +186,24 @@ func (c *Client) GenerateCommitMessage(ctx context.Context, files []string, diff
 		}
 	}
 
-	// Fallback to content if no tool call - treat as single commit
+	// Fallback to content if no tool call
 	if choice.Message.Content != "" {
+		content := choice.Message.Content
+
+		// Try to parse as JSON (AI sometimes returns JSON without tool call)
+		var commit CommitMessage
+		if err := json.Unmarshal([]byte(content), &commit); err == nil && commit.Subject != "" {
+			commit.Files = files
+			return &GenerateResult{
+				Commits: []CommitMessage{commit},
+				IsSplit: false,
+			}, nil
+		}
+
+		// Otherwise treat raw content as subject
 		return &GenerateResult{
 			Commits: []CommitMessage{{
-				Subject: choice.Message.Content,
+				Subject: content,
 				Files:   files,
 			}},
 			IsSplit: false,

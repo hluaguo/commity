@@ -1,6 +1,7 @@
 package ai_test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -22,15 +23,6 @@ func TestCommitMessageString(t *testing.T) {
 			expected: "feat: add user authentication",
 		},
 		{
-			name: "with scope",
-			msg: ai.CommitMessage{
-				Type:    "fix",
-				Scope:   "auth",
-				Subject: "prevent token expiration race condition",
-			},
-			expected: "fix(auth): prevent token expiration race condition",
-		},
-		{
 			name: "with body",
 			msg: ai.CommitMessage{
 				Type:    "docs",
@@ -40,14 +32,13 @@ func TestCommitMessageString(t *testing.T) {
 			expected: "docs: update README\n\nAdded installation instructions for Homebrew users.",
 		},
 		{
-			name: "full message with scope and body",
+			name: "full message with body",
 			msg: ai.CommitMessage{
 				Type:    "refactor",
-				Scope:   "config",
 				Subject: "extract validation logic",
 				Body:    "Moved validation into separate functions for better testability.",
 			},
-			expected: "refactor(config): extract validation logic\n\nMoved validation into separate functions for better testability.",
+			expected: "refactor: extract validation logic\n\nMoved validation into separate functions for better testability.",
 		},
 		{
 			name: "subject only (no type)",
@@ -55,15 +46,6 @@ func TestCommitMessageString(t *testing.T) {
 				Subject: "Update dependencies",
 			},
 			expected: "Update dependencies",
-		},
-		{
-			name: "empty scope ignored",
-			msg: ai.CommitMessage{
-				Type:    "chore",
-				Scope:   "",
-				Subject: "update dependencies",
-			},
-			expected: "chore: update dependencies",
 		},
 	}
 
@@ -189,20 +171,65 @@ func TestBuildPromptNonConventional(t *testing.T) {
 
 func TestBuildPromptDiffTruncation(t *testing.T) {
 	files := []string{"large.go"}
-	// Create a diff larger than 8000 characters
-	largeDiff := strings.Repeat("a", 10000)
-	types := []string{"feat"}
-
-	prompt := ai.BuildPrompt(files, largeDiff, true, types, "", "", "")
-
-	// Check that diff was truncated
-	if !strings.Contains(prompt, "... (truncated)") {
-		t.Error("large diff should be truncated")
+	// Create a large diff with proper structure (500 lines to trigger show/skip pattern)
+	var largeDiff strings.Builder
+	largeDiff.WriteString("diff --git a/large.go b/large.go\n")
+	largeDiff.WriteString("--- a/large.go\n")
+	largeDiff.WriteString("+++ b/large.go\n")
+	largeDiff.WriteString("@@ -1,500 +1,500 @@\n")
+	for i := 0; i < 500; i++ {
+		largeDiff.WriteString(fmt.Sprintf("+line %d content here\n", i))
 	}
 
-	// Original 10000 char diff should not be fully present
-	if strings.Contains(prompt, strings.Repeat("a", 9000)) {
-		t.Error("truncated diff should not contain full original content")
+	prompt := ai.BuildPrompt(files, largeDiff.String(), true, []string{"feat"}, "", "", "")
+
+	// Check that some lines were skipped with context
+	if !strings.Contains(prompt, "lines skipped") {
+		t.Error("large hunk should have skipped lines")
+	}
+	if !strings.Contains(prompt, "similar changes continue") {
+		t.Error("skip message should provide context")
+	}
+
+	// Calculate expected line numbers based on constants
+	// First segment shows @@ header + (ShowLines-1) content lines
+	lastLineFirstSegment := ai.ShowLines - 2 // -1 for @@ header, -1 for 0-indexing
+	// After skipping SkipLines, second segment starts
+	firstLineSecondSegment := lastLineFirstSegment + ai.SkipLines + 1
+
+	// Should contain beginning
+	if !strings.Contains(prompt, "line 0 content") {
+		t.Error("truncated diff should contain beginning lines")
+	}
+	if !strings.Contains(prompt, fmt.Sprintf("line %d content", lastLineFirstSegment)) {
+		t.Errorf("truncated diff should contain end of first segment (line %d)", lastLineFirstSegment)
+	}
+
+	// Should contain start of second segment
+	if !strings.Contains(prompt, fmt.Sprintf("line %d content", firstLineSecondSegment)) {
+		t.Errorf("truncated diff should contain start of second segment (line %d)", firstLineSecondSegment)
+	}
+}
+
+func TestBuildPromptSmartTruncationPreservesHeaders(t *testing.T) {
+	files := []string{"file.go"}
+	diff := `diff --git a/file.go b/file.go
+--- a/file.go
++++ b/file.go
+@@ -1,5 +1,5 @@
++added line
+`
+	prompt := ai.BuildPrompt(files, diff, true, []string{"feat"}, "", "", "")
+
+	// Should preserve diff headers
+	if !strings.Contains(prompt, "diff --git") {
+		t.Error("should preserve diff header")
+	}
+	if !strings.Contains(prompt, "--- a/file.go") {
+		t.Error("should preserve --- header")
+	}
+	if !strings.Contains(prompt, "+++ b/file.go") {
+		t.Error("should preserve +++ header")
 	}
 }
 
