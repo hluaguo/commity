@@ -38,15 +38,33 @@ func (m *ConfirmModel) Init() tea.Cmd {
 }
 
 func (m *ConfirmModel) Update(msg tea.Msg) (*ConfirmModel, tea.Cmd) {
+	// If on regenerate option and input is focused, handle input first
+	if m.cursor == 2 && m.input.Focused() {
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			switch keyMsg.String() {
+			case "up", "k":
+				m.cursor--
+				m.input.Blur()
+				return m, nil
+			case "enter":
+				m.submitted = true
+				m.action = "regenerate"
+				m.feedback = m.input.Value()
+				return m, nil
+			}
+		}
+		// Pass all other messages to input
+		var cmd tea.Cmd
+		m.input, cmd = m.input.Update(msg)
+		return m, cmd
+	}
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "up", "k":
 			if m.cursor > 0 {
 				m.cursor--
-				if m.cursor != 2 {
-					m.input.Blur()
-				}
 			}
 			return m, nil
 
@@ -74,31 +92,10 @@ func (m *ConfirmModel) Update(msg tea.Msg) (*ConfirmModel, tea.Cmd) {
 			return m, nil
 
 		case "e", "E":
-			// Edit message - only when not typing in regenerate input
-			if m.cursor != 2 || !m.input.Focused() {
-				m.submitted = true
-				m.action = "edit"
-				return m, nil
-			}
-
-		default:
-			// If on regenerate option, any printable key focuses and types
-			if m.cursor == 2 {
-				if !m.input.Focused() {
-					m.input.Focus()
-				}
-				var cmd tea.Cmd
-				m.input, cmd = m.input.Update(msg)
-				return m, cmd
-			}
+			m.submitted = true
+			m.action = "edit"
+			return m, nil
 		}
-	}
-
-	// Update text input if focused
-	if m.cursor == 2 {
-		var cmd tea.Cmd
-		m.input, cmd = m.input.Update(msg)
-		return m, cmd
 	}
 
 	return m, nil
