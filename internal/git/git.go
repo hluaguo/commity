@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -89,15 +90,49 @@ func (r *Repository) Status() ([]FileStatus, error) {
 		}
 
 		if status != "" {
+			// Check if path is a directory and expand it
+			info, err := os.Stat(path)
+			if err == nil && info.IsDir() {
+				// Expand directory into individual files
+				expandedFiles := expandDirectory(path, status, staged)
+				files = append(files, expandedFiles...)
+			} else {
+				files = append(files, FileStatus{
+					Path:   path,
+					Status: status,
+					Staged: staged,
+				})
+			}
+		}
+	}
+
+	return files, scanner.Err()
+}
+
+// expandDirectory recursively expands a directory into individual FileStatus entries
+func expandDirectory(dir string, status string, staged bool) []FileStatus {
+	var files []FileStatus
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return files
+	}
+
+	for _, entry := range entries {
+		fullPath := filepath.Join(dir, entry.Name())
+		if entry.IsDir() {
+			// Recursively expand subdirectories
+			files = append(files, expandDirectory(fullPath, status, staged)...)
+		} else {
 			files = append(files, FileStatus{
-				Path:   path,
+				Path:   fullPath,
 				Status: status,
 				Staged: staged,
 			})
 		}
 	}
 
-	return files, scanner.Err()
+	return files
 }
 
 func (r *Repository) Diff(files []string, staged bool) (string, error) {
@@ -117,34 +152,60 @@ func (r *Repository) Diff(files []string, staged bool) (string, error) {
 }
 
 func (r *Repository) DiffAll(files []string) (string, error) {
-	// Get both staged and unstaged diff
+	var buf bytes.Buffer
+
+	// Get both staged and unstaged diff for tracked files
 	staged, _ := r.Diff(files, true)
 	unstaged, _ := r.Diff(files, false)
+	buf.WriteString(staged)
+	buf.WriteString(unstaged)
 
-	if staged == "" && unstaged == "" {
-		// For untracked files, show content using git diff --no-index
-		// Note: --no-index returns exit code 1 when there are differences, so we ignore the error
-		var buf bytes.Buffer
-		for _, f := range files {
-			cmd := exec.Command("git", "diff", "--no-index", "--", "/dev/null", f)
-			out, _ := cmd.CombinedOutput()
-			buf.Write(out)
+	// Also handle untracked files - check each file individually
+	for _, f := range files {
+		cmd := exec.Command("git", "ls-files", "--error-unmatch", f)
+		if err := cmd.Run(); err != nil {
+			// File/directory is untracked
+			r.appendUntrackedContent(&buf, f)
 		}
-		// If still empty, just read file contents
-		if buf.Len() == 0 {
-			for _, f := range files {
-				content, err := os.ReadFile(f)
-				if err == nil {
-					buf.WriteString(fmt.Sprintf("+++ %s\n", f))
-					buf.Write(content)
-					buf.WriteString("\n")
-				}
-			}
-		}
-		return buf.String(), nil
 	}
 
-	return staged + unstaged, nil
+	return buf.String(), nil
+}
+
+// appendUntrackedContent adds content of untracked file or directory to buffer
+func (r *Repository) appendUntrackedContent(buf *bytes.Buffer, path string) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return
+	}
+
+	if info.IsDir() {
+		// For directories, read all files recursively
+		entries, err := os.ReadDir(path)
+		if err != nil {
+			return
+		}
+		for _, entry := range entries {
+			fullPath := filepath.Join(path, entry.Name())
+			r.appendUntrackedContent(buf, fullPath)
+		}
+		return
+	}
+
+	// For files, try git diff --no-index first
+	diffCmd := exec.Command("git", "diff", "--no-index", "--", "/dev/null", path)
+	out, _ := diffCmd.CombinedOutput()
+	if len(out) > 0 {
+		buf.Write(out)
+	} else {
+		// Fallback to reading file content directly
+		content, err := os.ReadFile(path)
+		if err == nil {
+			buf.WriteString(fmt.Sprintf("+++ %s\n", path))
+			buf.Write(content)
+			buf.WriteString("\n")
+		}
+	}
 }
 
 func (r *Repository) Add(files []string) error {
