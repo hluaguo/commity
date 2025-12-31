@@ -12,6 +12,11 @@ type Config struct {
 	General GeneralConfig `toml:"general"`
 	AI      AIConfig      `toml:"ai"`
 	Commit  CommitConfig  `toml:"commit"`
+	UI      UIConfig      `toml:"ui"`
+}
+
+type UIConfig struct {
+	Theme string `toml:"theme"` // tokyonight, dracula, catppuccin, nord
 }
 
 type GeneralConfig struct {
@@ -49,12 +54,15 @@ func Default() *Config {
 			SplitThreshold: 5,
 		},
 		AI: AIConfig{
-			Model:   "z-ai/glm-4.7",
-			BaseURL: "https://openrouter.ai/api/v1",
+			Model:   "gpt-4o-mini",
+			BaseURL: "https://api.openai.com/v1",
 		},
 		Commit: CommitConfig{
 			Conventional: true,
 			Types:        []string{"feat", "fix", "docs", "style", "refactor", "test", "chore"},
+		},
+		UI: UIConfig{
+			Theme: "tokyonight",
 		},
 	}
 }

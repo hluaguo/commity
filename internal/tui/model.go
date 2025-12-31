@@ -49,6 +49,10 @@ type Model struct {
 	spinner   spinner.Model
 	err       error
 	termWidth int
+
+	// Theming
+	theme  *Theme
+	styles *Styles
 }
 
 type generateMsg struct {
@@ -61,9 +65,12 @@ type commitMsg struct {
 }
 
 func New(cfg *config.Config, repo *git.Repository, aiClient *ai.Client, isFirstRun bool) (*Model, error) {
+	theme := GetTheme(cfg.UI.Theme)
+	styles := NewStyles(theme)
+
 	s := spinner.New()
 	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+	s.Style = lipgloss.NewStyle().Foreground(theme.Primary)
 
 	m := &Model{
 		cfg:        cfg,
@@ -72,6 +79,8 @@ func New(cfg *config.Config, repo *git.Repository, aiClient *ai.Client, isFirstR
 		spinner:    s,
 		termWidth:  getTermWidth(),
 		isFirstRun: isFirstRun,
+		theme:      theme,
+		styles:     styles,
 	}
 
 	// First run - show setup
@@ -117,7 +126,21 @@ func (m *Model) initFileSelectForm() {
 				Options(options...).
 				Value(&m.selected),
 		),
-	).WithTheme(huh.ThemeDracula())
+	).WithTheme(m.theme.GetHuhTheme())
+}
+
+func (m *Model) getThemeOptions() []huh.Option[string] {
+	var options []huh.Option[string]
+	for _, name := range GetThemeNames() {
+		t := GetTheme(name)
+		// Color block using the theme's primary color
+		colorBlock := lipgloss.NewStyle().
+			Background(t.Primary).
+			Render("  ")
+		label := fmt.Sprintf("%s %s", colorBlock, name)
+		options = append(options, huh.NewOption(label, name))
+	}
+	return options
 }
 
 func (m *Model) initConfirmForm() {
@@ -133,7 +156,7 @@ func (m *Model) initConfirmForm() {
 				).
 				Value(&m.action),
 		),
-	).WithTheme(huh.ThemeDracula())
+	).WithTheme(m.theme.GetHuhTheme())
 }
 
 func (m *Model) initSettingsForm() {
@@ -154,13 +177,19 @@ func (m *Model) initSettingsForm() {
 			huh.NewConfirm().
 				Title("Use Conventional Commits?").
 				Value(&m.cfg.Commit.Conventional),
+			huh.NewSelect[string]().
+				Title("Theme").
+				Options(m.getThemeOptions()...).
+				Value(&m.cfg.UI.Theme),
+		),
+		huh.NewGroup(
 			huh.NewText().
 				Title("Custom Instructions").
 				Description("Additional instructions for AI").
 				Value(&m.cfg.AI.CustomInstructions).
-				CharLimit(500),
+				CharLimit(1000),
 		),
-	).WithTheme(huh.ThemeDracula())
+	).WithTheme(m.theme.GetHuhTheme())
 }
 
 func (m *Model) initFirstRunForm() {
@@ -190,13 +219,19 @@ func (m *Model) initFirstRunForm() {
 				Affirmative("Yes").
 				Negative("No").
 				Value(&m.cfg.Commit.Conventional),
+			huh.NewSelect[string]().
+				Title("Theme").
+				Options(m.getThemeOptions()...).
+				Value(&m.cfg.UI.Theme),
+		),
+		huh.NewGroup(
 			huh.NewText().
 				Title("Custom Instructions (optional)").
 				Description("Additional instructions for commit generation").
 				Value(&m.cfg.AI.CustomInstructions).
 				CharLimit(500),
 		),
-	).WithTheme(huh.ThemeDracula())
+	).WithTheme(m.theme.GetHuhTheme())
 }
 
 func (m *Model) Init() tea.Cmd {
@@ -296,6 +331,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.err = fmt.Errorf("failed to save config: %w", err)
 				return m, nil
 			}
+			// Refresh theme
+			m.theme = GetTheme(m.cfg.UI.Theme)
+			m.styles = NewStyles(m.theme)
+			m.spinner.Style = lipgloss.NewStyle().Foreground(m.theme.Primary)
 			// Reinitialize AI client with new config
 			newClient, err := ai.New(&m.cfg.AI)
 			if err != nil {
@@ -322,6 +361,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.err = fmt.Errorf("failed to save config: %w", err)
 				return m, nil
 			}
+			// Refresh theme
+			m.theme = GetTheme(m.cfg.UI.Theme)
+			m.styles = NewStyles(m.theme)
+			m.spinner.Style = lipgloss.NewStyle().Foreground(m.theme.Primary)
 			// Reinitialize AI client with new config
 			newClient, err := ai.New(&m.cfg.AI)
 			if err != nil {
@@ -386,10 +429,21 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m *Model) renderKeyHint(key, desc string) string {
+	keyStyle := lipgloss.NewStyle().
+		Foreground(m.theme.Primary).
+		Background(m.theme.Secondary).
+		Bold(true).
+		Padding(0, 1)
+	descStyle := lipgloss.NewStyle().
+		Foreground(m.theme.Secondary)
+	return fmt.Sprintf("%s %s", keyStyle.Render(key), descStyle.Render(desc))
+}
+
 func (m *Model) View() string {
 	var s strings.Builder
 
-	s.WriteString(titleStyle.Render("commity"))
+	s.WriteString(m.styles.Title.Render("commity"))
 	s.WriteString("\n\n")
 
 	switch m.state {
@@ -397,12 +451,12 @@ func (m *Model) View() string {
 		s.WriteString(m.form.View())
 
 	case stateSettings:
-		s.WriteString(dimStyle.Render("Settings (saves on complete)"))
+		s.WriteString(m.styles.Dim.Render("Settings (saves on complete)"))
 		s.WriteString("\n\n")
 		s.WriteString(m.form.View())
 
 	case stateFileSelect:
-		s.WriteString(dimStyle.Render("Press 's' for settings"))
+		s.WriteString(m.renderKeyHint("[s]", "settings") + "  " + m.renderKeyHint("[q]", "quit"))
 		s.WriteString("\n\n")
 		s.WriteString(m.form.View())
 
@@ -422,11 +476,11 @@ func (m *Model) View() string {
 		if msgWidth < 40 {
 			msgWidth = 40
 		}
-		s.WriteString(messageStyle.Width(msgWidth).Render(commit.String()))
+		s.WriteString(m.styles.Message.Width(msgWidth).Render(commit.String()))
 		if m.isSplit && len(commit.Files) > 0 {
 			s.WriteString("\n\n")
 			filesStr := fmt.Sprintf("Files: %s", strings.Join(commit.Files, ", "))
-			s.WriteString(wrapText(dimStyle.Render(filesStr), m.termWidth-2))
+			s.WriteString(wrapText(m.styles.Dim.Render(filesStr), m.termWidth-2))
 		}
 		s.WriteString("\n\n")
 		s.WriteString(m.form.View())
@@ -437,20 +491,20 @@ func (m *Model) View() string {
 
 	case stateDone:
 		if m.isSplit {
-			s.WriteString(successStyle.Render(fmt.Sprintf("Created %d commits successfully!", len(m.commits))))
+			s.WriteString(m.styles.Success.Render(fmt.Sprintf("Created %d commits successfully!", len(m.commits))))
 		} else {
-			s.WriteString(successStyle.Render("Committed successfully!"))
+			s.WriteString(m.styles.Success.Render("Committed successfully!"))
 		}
 		s.WriteString("\n\n")
 		for i, c := range m.commits {
 			if m.completed[i] {
-				s.WriteString(wrapText(dimStyle.Render(fmt.Sprintf("  %s", c.String())), m.termWidth-2))
+				s.WriteString(wrapText(m.styles.Dim.Render(fmt.Sprintf("  %s", c.String())), m.termWidth-2))
 				s.WriteString("\n")
 			}
 		}
 
 	case stateError:
-		s.WriteString(wrapText(errorStyle.Render(fmt.Sprintf("Error: %v", m.err)), m.termWidth-2))
+		s.WriteString(wrapText(m.styles.Error.Render(fmt.Sprintf("Error: %v", m.err)), m.termWidth-2))
 	}
 
 	s.WriteString("\n")

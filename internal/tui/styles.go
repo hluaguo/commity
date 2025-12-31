@@ -15,25 +15,32 @@ func getTermWidth() int {
 	return width
 }
 
-var (
-	titleStyle = lipgloss.NewStyle().
+// Styles holds all the styled components using a theme
+type Styles struct {
+	Title   lipgloss.Style
+	Success lipgloss.Style
+	Error   lipgloss.Style
+	Dim     lipgloss.Style
+	Message lipgloss.Style
+}
+
+func NewStyles(theme *Theme) *Styles {
+	return &Styles{
+		Title: lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("205"))
-
-	successStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("42"))
-
-	errorStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("196"))
-
-	dimStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240"))
-
-	messageStyle = lipgloss.NewStyle().
+			Foreground(theme.Primary),
+		Success: lipgloss.NewStyle().
+			Foreground(theme.Success),
+		Error: lipgloss.NewStyle().
+			Foreground(theme.Error),
+		Dim: lipgloss.NewStyle().
+			Foreground(theme.Dim),
+		Message: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("62")).
-			Padding(1, 2)
-)
+			BorderForeground(theme.Border).
+			Padding(1, 2),
+	}
+}
 
 func wrapText(s string, width int) string {
 	return lipgloss.NewStyle().Width(width).Render(s)
