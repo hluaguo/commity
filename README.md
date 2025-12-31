@@ -57,19 +57,6 @@ commity
 3. **Confirm**: Review the message, edit if needed, or regenerate with feedback
 4. **Commit**: Confirm to create the commit
 
-### Key Bindings
-
-| Screen      | Key      | Action                |
-| ----------- | -------- | --------------------- |
-| File Select | `space`  | Toggle file selection |
-| File Select | `enter`  | Submit selection      |
-| File Select | `s`      | Open settings         |
-| File Select | `q`      | Quit                  |
-| Confirm     | `enter`  | Select action         |
-| Confirm     | `e`      | Edit message          |
-| Edit        | `ctrl+s` | Save changes          |
-| Edit        | `esc`    | Cancel edit           |
-
 ## Development
 
 ```bash
