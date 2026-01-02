@@ -3,7 +3,6 @@
 [![Go Version](https://img.shields.io/github/go-mod/go-version/hluaguo/commity)](https://go.dev/)
 [![Release](https://img.shields.io/github/v/release/hluaguo/commity)](https://github.com/hluaguo/commity/releases)
 [![License](https://img.shields.io/github/license/hluaguo/commity)](LICENSE)
-[![Go Report Card](https://goreportcard.com/badge/github.com/hluaguo/commity)](https://goreportcard.com/report/github.com/hluaguo/commity)
 
 AI-powered git commit message generator with a beautiful terminal UI.
 
